@@ -647,7 +647,7 @@ function StoreHours({t}){
 
 const openWhatsApp=(product,size)=>{
   const msg=`Саломе! Мен "${product.name}" фармоиш додан мехоҳам%0AАндоза: ${size||'?'}%0AНарх: ${fmt(product.price)} сом`;
-  window.open('https://wa.me/992000000000?text='+msg,'_blank');
+  window.open('https://wa.me/992876982424?text='+msg,'_blank');
 };
 
 // ── MAIN APP ─────────────────────────────────────────────────
@@ -804,7 +804,7 @@ export default function ShopApp() {
             <div style={{ fontSize:14, fontWeight:700, color:DARK, marginBottom:10 }}>Связаться с нами</div>
             <div style={{ display:'flex', gap:10, justifyContent:'center' }}>
               <a href="https://t.me/queenstar_shop" target="_blank" style={{ ...S.btnSm(BLUE), textDecoration:'none', display:'inline-block' }}>📱 Telegram</a>
-              <a href="https://wa.me/992000000000" target="_blank" style={{ ...S.btnSm(GREEN), textDecoration:'none', display:'inline-block' }}>💬 WhatsApp</a>
+              <a href="https://wa.me/992876982424" target="_blank" style={{ ...S.btnSm(GREEN), textDecoration:'none', display:'inline-block' }}>💬 WhatsApp</a>
               <a href="https://instagram.com/queenstar.shop" target="_blank" style={{ ...S.btnSm(GOLD), textDecoration:'none', display:'inline-block' }}>📸 Instagram</a>
             </div>
           </div>
