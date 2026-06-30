@@ -1,0 +1,17 @@
+{
+  "appId": "com.queenstar.shop",
+  "appName": "Queen Star Shop",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#FAF7F2"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "backgroundColor": "#FAF7F2",
+      "showSpinner": false
+    }
+  }
+}
