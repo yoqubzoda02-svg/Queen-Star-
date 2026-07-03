@@ -253,9 +253,12 @@ function FaqSection() {
 function Header({ cartCount, favCount, onCart, onAccount, onFav, onFaq, customer }) {
   return (
     <div style={{ background:PAPER, borderBottom:`1px solid ${LINE}`, padding:'14px 16px', display:'flex', justifyContent:'space-between', alignItems:'center', position:'sticky', top:0, zIndex:50 }}>
-      <div>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:INK, letterSpacing:1, fontWeight:700 }}>Queen <span style={{color:GOLD}}>Star</span></div>
-        <div style={{ fontSize:9, color:MUTED, letterSpacing:2.5, marginTop:1, fontWeight:600 }}>ДУШАНБЕ · ТАДЖИКИСТАН</div>
+      <div style={{ display:'flex', alignItems:'center', gap:9 }}>
+        <img src="/logo.png" alt="Queen Star" style={{ width:34, height:34, borderRadius:'50%', flexShrink:0 }}/>
+        <div>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, color:INK, letterSpacing:1, fontWeight:700 }}>Queen <span style={{color:GOLD}}>Star</span></div>
+          <div style={{ fontSize:9, color:MUTED, letterSpacing:2.5, marginTop:1, fontWeight:600 }}>ДУШАНБЕ · ТАДЖИКИСТАН</div>
+        </div>
       </div>
       <div style={{ display:'flex', gap:6, alignItems:'center' }}>
         <button onClick={onFaq} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:MUTED, padding:6 }}>❓</button>
