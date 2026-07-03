@@ -18,6 +18,8 @@ const BLUE   = '#3E76A8';
 
 const fmt = (n) => new Intl.NumberFormat('ru-RU').format(Math.round(n||0));
 const nowStr = () => new Date().toISOString();
+// photos[id] may be stored as a single URL string or an array of URLs — always take one valid photo
+const firstPhoto = (ph) => Array.isArray(ph) ? ph[0] : ph;
 
 const FONTS = "@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap');";
 
@@ -806,7 +808,7 @@ function ProductChat({ customer, products, photos, onAddToCart, onNeedAuth }) {
       customerId:customer.id, customerName:customer.name,
       type:'product',
       productId:product.id, productName:product.name,
-      productPrice:product.price, productPhoto:photos[product.id]||'',
+      productPrice:product.price, productPhoto:firstPhoto(photos[product.id])||'',
       date:nowStr()
     });
     setShareMode(false);
@@ -865,7 +867,7 @@ function ProductChat({ customer, products, photos, onAddToCart, onNeedAuth }) {
             <div key={p.id} onClick={()=>shareProduct(p)}
               style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 4px', cursor:'pointer', borderBottom:`1px solid ${LINE}` }}>
               <div style={{ width:36, height:36, borderRadius:8, background:BG, overflow:'hidden', flexShrink:0 }}>
-                {photos[p.id]?<img src={photos[p.id]} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>:<div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>👞</div>}
+                {firstPhoto(photos[p.id])?<img src={firstPhoto(photos[p.id])} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>:<div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>👞</div>}
               </div>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:13, fontWeight:600, color:INK }}>{p.name}</div>
@@ -1320,10 +1322,9 @@ function ProductPage({ product, photos, onAddToCart, isFav, onToggleFav, onClose
               <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, fontWeight:700, color:INK, marginBottom:12 }}>Похожие товары</div>
               <div style={{ display:'flex', gap:10, overflowX:'auto', paddingBottom:6 }}>
                 {similar.map(p=>(
-                  <div key={p.id} style={{ minWidth:140, ...S.card, cursor:'pointer' }} onClick={()=>{}}>
+                  <div key={p.id} style={{ minWidth:140, ...S.card, cursor:'pointer' }} onClick={()=>onView(p)}>
                     <div style={{ height:110, background:BG, overflow:'hidden' }}>
-                      {photos[p.id]&&Array.isArray(photos[p.id])?<img src={photos[p.id][0]} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>:
-                       photos[p.id]?<img src={photos[p.id]} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>:
+                      {firstPhoto(photos[p.id])?<img src={firstPhoto(photos[p.id])} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>:
                        <div style={{ height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28 }}>👞</div>}
                     </div>
                     <div style={{ padding:9 }}>
@@ -1608,7 +1609,7 @@ function StoreMap() {
         <div style={{ fontSize:12, color:MUTED, lineHeight:1.7 }}>
           📍 Душанбе, район Фирдавси<br/>
           🕐 Пн–Сб: 09:00–21:00 · Вс: 10:00–19:00<br/>
-          📞 +992 000 000000
+          📞 +992 87 698 24 24
         </div>
       </div>
       <a href="https://yandex.ru/maps/?text=Душанбе+обувь+Queen+Star" target="_blank"
@@ -1981,12 +1982,12 @@ export default function ShopApp() {
       {openProduct && <ProductPage
         product={openProduct} photos={photos}
         onAddToCart={addToCart} isFav={favs.includes(openProduct.id)} onToggleFav={toggleFav}
-        onClose={()=>setOpenProduct(null)} allProducts={products} addToast={addToast}/>}
+        onClose={()=>setOpenProduct(null)} allProducts={products} addToast={addToast} onView={viewProduct}/>}
       {showPayment && pendingOrder && <PaymentModal
         total={pendingOrder.total} orderId={pendingOrder.id||Date.now()}
         onClose={()=>setShowPayment(false)}
         onPaid={(method)=>{ addToast(`✅ Оплата через ${method} принята!`); setShowPayment(false); }}/>}
-      {quickView && <QuickView product={quickView} photo={photos[quickView.id]} onAddToCart={(item)=>{addToCart(item);setQuickView(null);}} onClose={()=>setQuickView(null)} isFav={favs.includes(quickView.id)} onToggleFav={toggleFav}/>}
+      {quickView && <QuickView product={quickView} photo={firstPhoto(photos[quickView.id])} onAddToCart={(item)=>{addToCart(item);setQuickView(null);}} onClose={()=>setQuickView(null)} isFav={favs.includes(quickView.id)} onToggleFav={toggleFav}/>}
       {showConsultant && <ConsultantChat onClose={()=>setShowConsultant(false)}/>}
       {notifyProduct && <NotifyModal product={notifyProduct} onClose={()=>setNotifyProduct(null)}/>}
       {showCitySelector && <CitySelector city={city} setCity={saveCity} onClose={()=>setShowCitySelector(false)}/>}
@@ -2096,7 +2097,7 @@ export default function ShopApp() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               {filtered.map(p=>(
                 <div key={p.id} onClick={()=>viewProduct(p)} style={{ cursor:'pointer' }}>
-                <ProductCard product={p} photo={photos[p.id]}
+                <ProductCard product={p} photo={firstPhoto(photos[p.id])}
                   onAddToCart={addToCart} isFav={favs.includes(p.id)} onToggleFav={toggleFav}
                   isHit={hitIds.includes(p.id)} onQuickView={setQuickView} onNotify={setNotifyProduct}/>
               </div>
@@ -2122,7 +2123,7 @@ export default function ShopApp() {
           <div style={{ ...S.card, padding:18, marginTop:14, textAlign:'center' }}>
             <div style={{ fontSize:14, fontWeight:700, color:INK, marginBottom:12 }}>Связаться с нами</div>
             <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
-              <a href="https://t.me/+992876982424" target="_blank" style={{ ...S.btnGhost(BLUE), textDecoration:'none', display:'inline-block' }}>📱 Telegram</a>
+              <a href="https://t.me/yoqubzodaamir" target="_blank" style={{ ...S.btnGhost(BLUE), textDecoration:'none', display:'inline-block' }}>📱 Telegram</a>
               <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" style={{ ...S.btnGhost(GREEN), textDecoration:'none', display:'inline-block' }}>💬 WhatsApp</a>
               <a href="https://instagram.com/queenstar.stor" target="_blank" style={{ ...S.btnGhost(GOLD), textDecoration:'none', display:'inline-block' }}>📸 Instagram</a>
             </div>
