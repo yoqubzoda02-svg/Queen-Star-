@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
-import { db } from './firebase.js';
-import { doc, getDoc, getDocs, addDoc, collection, onSnapshot, query, where, setDoc, orderBy } from 'firebase/firestore';
+import { useState, useEffect, useRef, useContext, createContext } from "react";
+import { db, messaging } from './firebase.js';
+import { doc, getDoc, getDocs, addDoc, collection, onSnapshot, query, where, setDoc, orderBy, arrayUnion } from 'firebase/firestore';
+import { getToken, onMessage } from 'firebase/messaging';
 
 // ── THEME ─────────────────────────────────────────────────────
 const BG     = '#FAF7F2';
@@ -20,6 +21,65 @@ const fmt = (n) => new Intl.NumberFormat('ru-RU').format(Math.round(n||0));
 const nowStr = () => new Date().toISOString();
 // photos[id] may be stored as a single URL string or an array of URLs — always take one valid photo
 const firstPhoto = (ph) => Array.isArray(ph) ? ph[0] : ph;
+
+// ── CURRENCY (prices are stored in сом; show converted for Russia region) ──
+const SOM_TO_RUB = 9.3; // ⚙️ обновляйте курс здесь при необходимости
+const priceStr = (amount, city) => city==='russia' ? `${fmt(amount*SOM_TO_RUB)} ₽` : `${fmt(amount)} сом`;
+const CityContext = createContext('dushanbe');
+const useCity = () => useContext(CityContext);
+
+// ── DELIVERY FEE ────────────────────────────────────────────────
+const DELIVERY_FEE = 15; // сом, доставка по Душанбе
+const FREE_DELIVERY_MIN = 500; // бесплатная доставка при заказе от этой суммы
+
+// ── LANGUAGE (ru / tj / en) ───────────────────────────────────
+const LANG_LABEL = { ru:'RU', tj:'TJ', en:'EN' };
+const DICT = {
+  ru: {
+    tagline:'Женская обувь · Душанбе · Доставка по городу',
+    perk_delivery:'🚚 Доставка', perk_pay:'💳 Нал/Перевод', perk_return:'📦 Возврат 7 дней',
+    all:'Все товары', boots:'Сапоги', heels:'Каблуки', sandals:'Босоножки', sneakers:'Кроссовки', flats:'Балетки', slippers:'Тапочки',
+    popular:'Популярное', new_:'Новинки', price_up:'Цена ↑', price_down:'Цена ↓', filters:'⚙️ Фильтры', consultant:'💬 Консультант',
+    search_ph:'Поиск товаров...', products_count:(n)=>`${n} товаров`, nothing_found:'Ничего не найдено', no_favs:'Нет избранных товаров',
+    cart:'Корзина', cart_empty:'Корзина пуста', cart_empty_sub:'Добавь товары из каталога', promo:'🎁 Промокод', promo_ph:'Введи промокод', apply:'Применить',
+    total:'Итого', checkout:'Оформить заказ →', login_checkout:'Войти и оформить →', delivery_fee:'Доставка', delivery_free:'бесплатно',
+    account:'Мой аккаунт', logout:'Выйти', orders_history:'История заказов', no_orders:'Заказов пока нет',
+    login_title:'Вход в аккаунт', register_title:'Создать аккаунт', phone_label:'Номер телефона', continue_:'Продолжить →', pin_label:'PIN-код (4 цифры)', pin_set_label:'Придумай PIN-код (4 цифры)', name_label:'Твоё имя',
+    faq_title:'Частые вопросы', contact_us:'Связаться с нами',
+    checkout_title:'Оформление', delivery_type:'Способ получения', delivery:'🚚 Доставка', pickup:'🏬 Самовывоз', address:'Адрес доставки', payment:'Оплата', cash:'💵 Наличные', transfer:'📲 Перевод', note:'Заметка', confirm_order:'Подтвердить заказ →',
+    order_success:'Заказ принят!', back_to_catalog:'← Вернуться в каталог',
+  },
+  tj: {
+    tagline:'Пойафзоли занона · Душанбе · Расонидан дар шаҳр',
+    perk_delivery:'🚚 Расонидан', perk_pay:'💳 Нақд/Кӯчонидан', perk_return:'📦 Бозгашт 7 рӯз',
+    all:'Ҳама молҳо', boots:'Мӯза', heels:'Пошна', sandals:'Сандал', sneakers:'Кроссовка', flats:'Балетка', slippers:'Пойафзоли хона',
+    popular:'Маъмултарин', new_:'Наврасидаҳо', price_up:'Нарх ↑', price_down:'Нарх ↓', filters:'⚙️ Филтрҳо', consultant:'💬 Мушовир',
+    search_ph:'Ҷустуҷӯи мол...', products_count:(n)=>`${n} мол`, nothing_found:'Чизе ёфт нашуд', no_favs:'Молҳои интихобшуда нест',
+    cart:'Сабад', cart_empty:'Сабад холист', cart_empty_sub:'Аз каталог мол илова кун', promo:'🎁 Рамзи тахфиф', promo_ph:'Рамзро ворид кун', apply:'Татбиқ кардан',
+    total:'Ҳамагӣ', checkout:'Фармоиш додан →', login_checkout:'Даромадан ва фармоиш →', delivery_fee:'Расонидан', delivery_free:'ройгон',
+    account:'Ҳисоби ман', logout:'Баромадан', orders_history:'Таърихи фармоишҳо', no_orders:'Ҳанӯз фармоише нест',
+    login_title:'Воридшавӣ', register_title:'Сохтани ҳисоб', phone_label:'Рақами телефон', continue_:'Идома →', pin_label:'Рамзи PIN (4 рақам)', pin_set_label:'Рамзи PIN созед (4 рақам)', name_label:'Номи шумо',
+    faq_title:'Саволҳои маъмул', contact_us:'Бо мо тамос гиред',
+    checkout_title:'Расмиёт', delivery_type:'Тарзи гирифтан', delivery:'🚚 Расонидан', pickup:'🏬 Худгирӣ', address:'Суроғаи расонидан', payment:'Пардохт', cash:'💵 Нақд', transfer:'📲 Кӯчонидан', note:'Қайд', confirm_order:'Тасдиқ кардани фармоиш →',
+    order_success:'Фармоиш қабул шуд!', back_to_catalog:'← Бозгашт ба каталог',
+  },
+  en: {
+    tagline:"Women's shoes · Dushanbe · City delivery",
+    perk_delivery:'🚚 Delivery', perk_pay:'💳 Cash/Transfer', perk_return:'📦 7-day returns',
+    all:'All items', boots:'Boots', heels:'Heels', sandals:'Sandals', sneakers:'Sneakers', flats:'Flats', slippers:'Slippers',
+    popular:'Popular', new_:'New', price_up:'Price ↑', price_down:'Price ↓', filters:'⚙️ Filters', consultant:'💬 Consultant',
+    search_ph:'Search products...', products_count:(n)=>`${n} products`, nothing_found:'Nothing found', no_favs:'No favorites yet',
+    cart:'Cart', cart_empty:'Cart is empty', cart_empty_sub:'Add products from the catalog', promo:'🎁 Promo code', promo_ph:'Enter promo code', apply:'Apply',
+    total:'Total', checkout:'Checkout →', login_checkout:'Log in and checkout →', delivery_fee:'Delivery', delivery_free:'free',
+    account:'My account', logout:'Log out', orders_history:'Order history', no_orders:'No orders yet',
+    login_title:'Log in', register_title:'Create account', phone_label:'Phone number', continue_:'Continue →', pin_label:'PIN code (4 digits)', pin_set_label:'Create a PIN code (4 digits)', name_label:'Your name',
+    faq_title:'FAQ', contact_us:'Contact us',
+    checkout_title:'Checkout', delivery_type:'Delivery method', delivery:'🚚 Delivery', pickup:'🏬 Pickup', address:'Delivery address', payment:'Payment', cash:'💵 Cash', transfer:'📲 Transfer', note:'Note', confirm_order:'Confirm order →',
+    order_success:'Order placed!', back_to_catalog:'← Back to catalog',
+  },
+};
+const LangContext = createContext('ru');
+const useLang = () => { const lang = useContext(LangContext); return { lang, t:(key)=> (DICT[lang]||DICT.ru)[key] }; };
 
 const FONTS = "@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Manrope:wght@400;500;600;700;800&display=swap');";
 
@@ -48,7 +108,7 @@ const FAQ = [
   {q:'Есть самовывоз?', a:'Да, можно выбрать самовывоз при оформлении заказа и забрать товар в магазине.'},
 ];
 
-const WHATSAPP_NUMBER = '992876982424'; // ⚠️ замени на свой номер
+const WHATSAPP_NUMBER = '992876982424';
 
 // ── TOAST ─────────────────────────────────────────────────────
 function Toast({ toasts }) {
@@ -180,9 +240,10 @@ function FaqItem({ q, a }) {
 }
 
 function FaqSection() {
+  const { t } = useLang();
   return (
     <div style={{ ...S.card, padding:'6px 18px 6px' }}>
-      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:17, fontWeight:700, color:INK, padding:'14px 0 4px' }}>Частые вопросы</div>
+      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:17, fontWeight:700, color:INK, padding:'14px 0 4px' }}>{t('faq_title')}</div>
       {FAQ.map((f,i)=><FaqItem key={i} q={f.q} a={f.a}/>)}
     </div>
   );
@@ -214,10 +275,16 @@ function Header({ cartCount, favCount, onCart, onAccount, onFav, onFaq, customer
 }
 
 // ── AUTH ──────────────────────────────────────────────────────
+// Returning customers must confirm a 4-digit PIN tied to their phone number —
+// otherwise anyone who knows/guesses a phone number could open a stranger's
+// account and order history. New accounts set their PIN during registration;
+// older accounts created before this existed are asked to set one on next login.
 function AuthModal({ onClose, onLogin }) {
   const [step, setStep]   = useState('phone');
   const [phone, setPhone] = useState('+992');
   const [name, setName]   = useState('');
+  const [pin, setPin]     = useState('');
+  const [existing, setExisting] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr]     = useState('');
 
@@ -227,19 +294,32 @@ function AuthModal({ onClose, onLogin }) {
     try {
       const id = phone.replace(/\D/g,'');
       const snap = await getDoc(doc(db,'shop_customers',id));
-      if (snap.exists()) { onLogin(snap.data()); onClose(); }
-      else setStep('name');
+      if (snap.exists()) {
+        const data = snap.data();
+        setExisting(data);
+        setStep(data.pin ? 'pin' : 'setpin');
+      } else setStep('name');
     } catch { setErr('Ошибка. Попробуй снова.'); }
     setLoading(false);
   };
 
+  const confirmPin = async () => {
+    if (pin !== existing.pin) { setErr('Неверный PIN'); setPin(''); return; }
+    onLogin(existing); onClose();
+  };
+
   const register = async () => {
     if (!name.trim()) { setErr('Введи имя'); return; }
+    setStep('setpin');
+  };
+
+  const savePin = async () => {
+    if (!/^\d{4}$/.test(pin)) { setErr('PIN должен быть из 4 цифр'); return; }
     setLoading(true);
     try {
       const id = phone.replace(/\D/g,'');
-      const c = { id, name:name.trim(), phone, createdAt:nowStr() };
-      await setDoc(doc(db,'shop_customers',id), c);
+      const c = { id, name:(existing?.name||name).trim?.()||existing?.name||name, phone, pin, createdAt:existing?.createdAt||nowStr() };
+      await setDoc(doc(db,'shop_customers',id), c, { merge:true });
       onLogin(c); onClose();
     } catch { setErr('Ошибка регистрации.'); }
     setLoading(false);
@@ -249,7 +329,7 @@ function AuthModal({ onClose, onLogin }) {
     <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:PAPER, borderRadius:22, padding:26, maxWidth:340, width:'100%' }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:18 }}>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700 }}>{step==='phone'?'Вход в аккаунт':'Создать аккаунт'}</div>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700 }}>{step==='phone'?'Вход в аккаунт':step==='pin'?'Введи PIN':step==='name'?'Создать аккаунт':'Придумай PIN'}</div>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:MUTED }}>✕</button>
         </div>
         {step==='phone'&&(<>
@@ -259,13 +339,33 @@ function AuthModal({ onClose, onLogin }) {
           {err&&<div style={{ fontSize:12, color:RED, marginBottom:10 }}>{err}</div>}
           <button style={S.btn()} onClick={check} disabled={loading}>{loading?'Проверяем...':'Продолжить →'}</button>
         </>)}
+        {step==='pin'&&(<>
+          <div style={{ background:SAND, borderRadius:10, padding:11, marginBottom:14, fontSize:13, color:GOLD_D, fontWeight:600 }}>📱 {phone} · {existing?.name}</div>
+          <label style={S.label}>PIN-код</label>
+          <input style={{ ...S.input, marginBottom:14, textAlign:'center', fontSize:24, letterSpacing:8 }} type="password" inputMode="numeric" maxLength={4}
+            value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,''));setErr('');}}
+            onKeyDown={e=>{if(e.key==='Enter')confirmPin();}} placeholder="••••" autoFocus/>
+          {err&&<div style={{ fontSize:12, color:RED, marginBottom:10 }}>{err}</div>}
+          <button style={S.btn()} onClick={confirmPin} disabled={loading}>Войти</button>
+          <button style={{ ...S.btn(MUTED), marginTop:8, opacity:0.8 }} onClick={()=>{setStep('phone');setPin('');setErr('');}}>← Назад</button>
+        </>)}
         {step==='name'&&(<>
           <div style={{ background:SAND, borderRadius:10, padding:11, marginBottom:14, fontSize:13, color:GOLD_D, fontWeight:600 }}>📱 {phone}</div>
           <label style={S.label}>Твоё имя</label>
           <input style={{ ...S.input, marginBottom:14 }} value={name} onChange={e=>{setName(e.target.value);setErr('');}} placeholder="Зарина, Малика..." autoFocus/>
           {err&&<div style={{ fontSize:12, color:RED, marginBottom:10 }}>{err}</div>}
-          <button style={S.btn()} onClick={register} disabled={loading}>{loading?'Создаём...':'✓ Создать аккаунт'}</button>
+          <button style={S.btn()} onClick={register} disabled={loading}>Далее →</button>
           <button style={{ ...S.btn(MUTED), marginTop:8, opacity:0.8 }} onClick={()=>setStep('phone')}>← Назад</button>
+        </>)}
+        {step==='setpin'&&(<>
+          <div style={{ background:SAND, borderRadius:10, padding:11, marginBottom:14, fontSize:13, color:GOLD_D, fontWeight:600 }}>📱 {phone}</div>
+          <div style={{ fontSize:13, color:MUTED, marginBottom:14 }}>{existing?'Защити свой аккаунт — придумай PIN из 4 цифр':'Придумай PIN из 4 цифр для входа в следующий раз'}</div>
+          <label style={S.label}>Новый PIN-код</label>
+          <input style={{ ...S.input, marginBottom:14, textAlign:'center', fontSize:24, letterSpacing:8 }} type="password" inputMode="numeric" maxLength={4}
+            value={pin} onChange={e=>{setPin(e.target.value.replace(/\D/g,''));setErr('');}}
+            onKeyDown={e=>{if(e.key==='Enter')savePin();}} placeholder="••••" autoFocus/>
+          {err&&<div style={{ fontSize:12, color:RED, marginBottom:10 }}>{err}</div>}
+          <button style={S.btn()} onClick={savePin} disabled={loading}>{loading?'Сохраняем...':'✓ Сохранить и войти'}</button>
         </>)}
       </div>
     </div>
@@ -320,8 +420,11 @@ function LeaveReview({ order, customer, onClose }) {
 
 // ── ACCOUNT PAGE ──────────────────────────────────────────────
 function AccountPage({ customer, onClose, onLogout, addToast }) {
+  const city = useCity();
+  const { t } = useLang();
   const [orders, setOrders]       = useState([]);
   const [reviewFor, setReviewFor] = useState(null);
+  const [pushOn, setPushOn]       = useState(typeof Notification!=='undefined' && Notification.permission==='granted');
   const prevStatuses = useRef({});
 
   useEffect(()=>{
@@ -352,8 +455,8 @@ function AccountPage({ customer, onClose, onLogout, addToast }) {
       <div style={{ ...S.page, padding:'16px 16px 80px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:INK }}>←</button>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700 }}>Мой аккаунт</div>
-          <button onClick={onLogout} style={{ background:'none', border:'none', fontSize:11, color:RED, cursor:'pointer', fontWeight:700 }}>Выйти</button>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700 }}>{t('account')}</div>
+          <button onClick={onLogout} style={{ background:'none', border:'none', fontSize:11, color:RED, cursor:'pointer', fontWeight:700 }}>{t('logout')}</button>
         </div>
         <div style={{ ...S.card, padding:18, marginBottom:22 }}>
           <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:16 }}>
@@ -369,18 +472,29 @@ function AccountPage({ customer, onClose, onLogout, addToast }) {
               <div style={{ fontSize:10, color:MUTED, fontWeight:600 }}>заказов</div>
             </div>
             <div style={{ flex:1, background:BG, borderRadius:12, padding:'12px', textAlign:'center' }}>
-              <div style={{ fontSize:22, fontWeight:800, color:GREEN }}>{fmt(orders.filter(o=>o.status==='done').reduce((s,o)=>s+o.total,0))}</div>
-              <div style={{ fontSize:10, color:MUTED, fontWeight:600 }}>сом потрачено</div>
+              <div style={{ fontSize:22, fontWeight:800, color:GREEN }}>{priceStr(orders.filter(o=>o.status==='done').reduce((s,o)=>s+o.total,0), city)}</div>
+              <div style={{ fontSize:10, color:MUTED, fontWeight:600 }}>потрачено</div>
             </div>
           </div>
         </div>
         <LoyaltyCard customer={customer}/>
+        {!pushOn && (
+          <div style={{ ...S.card, padding:16, marginBottom:14, display:'flex', alignItems:'center', gap:12 }}>
+            <div style={{ fontSize:24 }}>🔔</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:INK }}>Уведомления о заказе</div>
+              <div style={{ fontSize:11, color:MUTED }}>Узнавай о статусе заказа даже с закрытым сайтом</div>
+            </div>
+            <button style={{ ...S.btnGhost(GOLD), padding:'8px 12px', fontSize:12, whiteSpace:'nowrap' }}
+              onClick={async()=>{ if(await enablePush(customer, addToast)) setPushOn(true); }}>Включить</button>
+          </div>
+        )}
         <ReferralBlock customer={customer}/>
-        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:INK, fontWeight:700, marginBottom:12 }}>История заказов</div>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:INK, fontWeight:700, marginBottom:12 }}>{t('orders_history')}</div>
         {orders.length===0 ? (
           <div style={{ textAlign:'center', padding:'40px 0', color:MUTED }}>
             <div style={{ fontSize:38, marginBottom:10 }}>📦</div>
-            Заказов пока нет
+            {t('no_orders')}
           </div>
         ) : orders.map(o=>{
           const st = ST[o.status]||ST.new;
@@ -388,7 +502,7 @@ function AccountPage({ customer, onClose, onLogout, addToast }) {
             <div key={o.id} style={{ ...S.card, padding:15, marginBottom:11 }}>
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:INK }}>{o.productName}</div>
-                <div style={{ fontSize:16, fontWeight:800, color:GOLD_D }}>{fmt(o.total)} сом</div>
+                <div style={{ fontSize:16, fontWeight:800, color:GOLD_D }}>{priceStr(o.total, city)}</div>
               </div>
               <div style={{ fontSize:12, color:MUTED, marginBottom:9 }}>р.{o.size} · {o.qty} шт · {new Date(o.date).toLocaleDateString('ru-RU')}</div>
               <OrderTimeline status={o.status}/>
@@ -404,7 +518,9 @@ function AccountPage({ customer, onClose, onLogout, addToast }) {
 }
 
 // ── CART ──────────────────────────────────────────────────────
-function CartPage({ cart, onClose, onCheckout, onRemove, customer, onNeedAuth }) {
+function CartPage({ cart, onClose, onCheckout, onRemove, onQtyChange, customer, onNeedAuth }) {
+  const city = useCity();
+  const { t } = useLang();
   const [firstOrderBonus, setFirstOrderBonus] = useState(false);
   const [checkedBonus, setCheckedBonus] = useState(false);
   const [promo, setPromo]       = useState('');
@@ -414,6 +530,7 @@ function CartPage({ cart, onClose, onCheckout, onRemove, customer, onNeedAuth })
   const subtotal = cart.reduce((s,x)=>s+x.total,0);
   const effectiveDiscount = discount>0 ? discount : (firstOrderBonus ? 10 : 0);
   const total = Math.round(subtotal * (1 - effectiveDiscount/100));
+  const deliveryFee = total >= FREE_DELIVERY_MIN ? 0 : DELIVERY_FEE;
 
   useEffect(()=>{
     if(!customer){ setCheckedBonus(true); return; }
@@ -441,7 +558,7 @@ function CartPage({ cart, onClose, onCheckout, onRemove, customer, onNeedAuth })
       <div style={{ ...S.page, padding:'16px 16px 170px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:INK }}>←</button>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700 }}>Корзина ({cart.length})</div>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700 }}>{t('cart')} ({cart.length})</div>
         </div>
         {checkedBonus && firstOrderBonus && discount===0 && cart.length>0 && (
           <div style={{ background:`linear-gradient(90deg,${GOLD},${GOLD_D})`, borderRadius:14, padding:'13px 16px', marginBottom:14, color:'#fff', display:'flex', alignItems:'center', gap:10 }}>
@@ -455,8 +572,8 @@ function CartPage({ cart, onClose, onCheckout, onRemove, customer, onNeedAuth })
         {cart.length===0 ? (
           <div style={{ textAlign:'center', padding:'70px 0', color:MUTED }}>
             <div style={{ fontSize:46, marginBottom:14 }}>🛍</div>
-            <div style={{ fontSize:16, fontWeight:700, color:INK, marginBottom:6 }}>Корзина пуста</div>
-            <div style={{ fontSize:13 }}>Добавь товары из каталога</div>
+            <div style={{ fontSize:16, fontWeight:700, color:INK, marginBottom:6 }}>{t('cart_empty')}</div>
+            <div style={{ fontSize:13 }}>{t('cart_empty_sub')}</div>
           </div>
         ) : (<>
           {cart.map((item,i)=>(
@@ -466,17 +583,24 @@ function CartPage({ cart, onClose, onCheckout, onRemove, customer, onNeedAuth })
               </div>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:INK }}>{item.name}</div>
-                <div style={{ fontSize:12, color:MUTED, marginTop:2 }}>Размер {item.size} · {item.qty} шт</div>
-                <div style={{ fontSize:15, fontWeight:800, color:GOLD_D, marginTop:5 }}>{fmt(item.total)} сом</div>
+                <div style={{ fontSize:12, color:MUTED, marginTop:2 }}>Размер {item.size}</div>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:6 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:0, border:`1.5px solid ${LINE}`, borderRadius:8, overflow:'hidden' }}>
+                    <button onClick={()=>onQtyChange(i,-1)} style={{ background:BG, border:'none', width:26, height:26, cursor:'pointer', fontSize:14, fontWeight:700, color:INK }}>−</button>
+                    <div style={{ width:28, textAlign:'center', fontSize:13, fontWeight:700, color:INK }}>{item.qty}</div>
+                    <button onClick={()=>onQtyChange(i,1)} style={{ background:BG, border:'none', width:26, height:26, cursor:'pointer', fontSize:14, fontWeight:700, color:INK }}>+</button>
+                  </div>
+                  <div style={{ fontSize:15, fontWeight:800, color:GOLD_D }}>{priceStr(item.total, city)}</div>
+                </div>
               </div>
               <button onClick={()=>onRemove(i)} style={{ background:'none', border:'none', color:MUTED, fontSize:16, cursor:'pointer', alignSelf:'flex-start' }}>✕</button>
             </div>
           ))}
           <div style={{ ...S.card, padding:15, marginTop:6 }}>
-            <div style={{ fontSize:12, color:MUTED, marginBottom:9, fontWeight:700 }}>🎁 Промокод</div>
+            <div style={{ fontSize:12, color:MUTED, marginBottom:9, fontWeight:700 }}>{t('promo')}</div>
             <div style={{ display:'flex', gap:8 }}>
-              <input style={{ ...S.input, flex:1, padding:'10px 12px', fontSize:14 }} value={promo} onChange={e=>setPromo(e.target.value)} placeholder="Введи промокод"/>
-              <button style={{ ...S.btnGhost(GOLD), whiteSpace:'nowrap' }} onClick={applyPromo}>Применить</button>
+              <input style={{ ...S.input, flex:1, padding:'10px 12px', fontSize:14 }} value={promo} onChange={e=>setPromo(e.target.value)} placeholder={t('promo_ph')}/>
+              <button style={{ ...S.btnGhost(GOLD), whiteSpace:'nowrap' }} onClick={applyPromo}>{t('apply')}</button>
             </div>
             {promoMsg && <div style={{ fontSize:12, color:promoMsg.startsWith('✅')?GREEN:RED, marginTop:8, fontWeight:600 }}>{promoMsg}</div>}
           </div>
@@ -487,14 +611,18 @@ function CartPage({ cart, onClose, onCheckout, onRemove, customer, onNeedAuth })
           <div style={{ maxWidth:480, margin:'0 auto' }}>
             {effectiveDiscount>0 && <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
               <div style={{ fontSize:13, color:MUTED }}>Скидка {effectiveDiscount}%{discount===0?' (первый заказ)':''}</div>
-              <div style={{ fontSize:13, color:GREEN, fontWeight:700 }}>− {fmt(subtotal-total)} сом</div>
+              <div style={{ fontSize:13, color:GREEN, fontWeight:700 }}>− {priceStr(subtotal-total, city)}</div>
             </div>}
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+              <div style={{ fontSize:13, color:MUTED }}>{t('delivery_fee')}</div>
+              <div style={{ fontSize:13, color:deliveryFee?INK:GREEN, fontWeight:700 }}>{deliveryFee ? priceStr(deliveryFee, city) : t('delivery_free')}</div>
+            </div>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
-              <div style={{ fontSize:14, color:MUTED, fontWeight:600 }}>Итого</div>
-              <div style={{ fontSize:23, fontWeight:800, color:GOLD_D }}>{fmt(total)} сом</div>
+              <div style={{ fontSize:14, color:MUTED, fontWeight:600 }}>{t('total')}</div>
+              <div style={{ fontSize:23, fontWeight:800, color:GOLD_D }}>{priceStr(total+deliveryFee, city)}</div>
             </div>
             <button style={S.btn()} onClick={customer?()=>onCheckout(effectiveDiscount):onNeedAuth}>
-              {customer?'Оформить заказ →':'Войти и оформить →'}
+              {customer?t('checkout'):t('login_checkout')}
             </button>
           </div>
         </div>
@@ -505,6 +633,8 @@ function CartPage({ cart, onClose, onCheckout, onRemove, customer, onNeedAuth })
 
 // ── ORDER FORM ────────────────────────────────────────────────
 function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
+  const city = useCity();
+  const { t } = useLang();
   const [deliveryType, setDeliveryType] = useState('delivery');
   const [address, setAddress] = useState('');
   const [payment, setPayment] = useState('cash');
@@ -514,16 +644,19 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
 
   const subtotal = cart.reduce((s,x)=>s+x.total,0);
   const total = Math.round(subtotal*(1-discount/100));
+  const deliveryFee = deliveryType==='delivery' && total < FREE_DELIVERY_MIN ? DELIVERY_FEE : 0;
+  const grandTotal = total + deliveryFee;
 
   const submit = async () => {
     if(deliveryType==='delivery' && !address.trim()){ setErr('Укажи адрес доставки'); return; }
     setLoading(true); setErr('');
     try {
-      await Promise.all(cart.map(item=>addDoc(collection(db,'shop_orders'),{
+      await Promise.all(cart.map((item,i)=>addDoc(collection(db,'shop_orders'),{
         customerName:customer.name, customerPhone:customer.phone, customerId:customer.id,
         productId:item.id, productName:item.name, qty:item.qty, price:item.price,
         total:Math.round(item.total*(1-discount/100)), size:item.size,
         deliveryType, address:deliveryType==='delivery'?address.trim():'Самовывоз из магазина',
+        deliveryFee: i===0 ? deliveryFee : 0,
         payment, note:note.trim(),
         status:'new', source:'shop', date:nowStr(), discount
       })));
@@ -544,7 +677,7 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
       <div style={{ maxWidth:480, margin:'0 auto', padding:'16px 16px 120px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:INK }}>←</button>
-          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700 }}>Оформление</div>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700 }}>{t('checkout_title')}</div>
         </div>
         <div style={{ ...S.card, padding:14, marginBottom:14, display:'flex', gap:12, alignItems:'center' }}>
           <div style={{ width:42, height:42, borderRadius:'50%', background:`linear-gradient(135deg,${GOLD},${GOLD_D})`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, color:'#fff', fontWeight:700 }}>{customer.name[0].toUpperCase()}</div>
@@ -557,16 +690,20 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
               <div style={{ fontWeight:700, color:GOLD_D }}>{fmt(Math.round(item.total*(1-discount/100)))}</div>
             </div>
           ))}
+          <div style={{ display:'flex', justifyContent:'space-between', marginTop:9 }}>
+            <div style={{ fontSize:13, color:MUTED }}>{t('delivery_fee')}</div>
+            <div style={{ fontSize:13, color:deliveryFee?INK:GREEN, fontWeight:700 }}>{deliveryFee ? priceStr(deliveryFee, city) : t('delivery_free')}</div>
+          </div>
           <div style={{ display:'flex', justifyContent:'space-between', marginTop:11 }}>
-            <div style={{ fontWeight:700, color:INK }}>Итого</div>
-            <div style={{ fontSize:18, fontWeight:800, color:GOLD_D }}>{fmt(total)} сом</div>
+            <div style={{ fontWeight:700, color:INK }}>{t('total')}</div>
+            <div style={{ fontSize:18, fontWeight:800, color:GOLD_D }}>{priceStr(grandTotal, city)}</div>
           </div>
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={S.label}>Способ получения</label>
+          <label style={S.label}>{t('delivery_type')}</label>
           <div style={{ display:'flex', gap:10 }}>
-            {[{v:'delivery',l:'🚚 Доставка'},{v:'pickup',l:'🏬 Самовывоз'}].map(opt=>(
+            {[{v:'delivery',l:t('delivery')},{v:'pickup',l:t('pickup')}].map(opt=>(
               <div key={opt.v} onClick={()=>setDeliveryType(opt.v)}
                 style={{ flex:1, padding:'12px', textAlign:'center', borderRadius:12, cursor:'pointer', fontSize:13, fontWeight:700,
                   background:deliveryType===opt.v?GOLD:PAPER, color:deliveryType===opt.v?'#fff':MUTED,
@@ -579,7 +716,7 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
 
         {deliveryType==='delivery' && (
           <div style={{ marginBottom:14 }}>
-            <label style={S.label}>Адрес доставки</label>
+            <label style={S.label}>{t('address')}</label>
             <input style={S.input} value={address} onChange={e=>setAddress(e.target.value)} placeholder="ул. Рудаки 10, кв. 5"/>
           </div>
         )}
@@ -590,9 +727,9 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
         )}
 
         <div style={{ marginBottom:14 }}>
-          <label style={S.label}>Оплата</label>
+          <label style={S.label}>{t('payment')}</label>
           <div style={{ display:'flex', gap:10 }}>
-            {[{v:'cash',l:'💵 Наличные'},{v:'transfer',l:'📲 Перевод'}].map(opt=>(
+            {[{v:'cash',l:t('cash')},{v:'transfer',l:t('transfer')}].map(opt=>(
               <div key={opt.v} onClick={()=>setPayment(opt.v)}
                 style={{ flex:1, padding:'12px', textAlign:'center', borderRadius:12, cursor:'pointer', fontSize:13, fontWeight:700,
                   background:payment===opt.v?GOLD:PAPER, color:payment===opt.v?'#fff':MUTED,
@@ -603,13 +740,13 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
           </div>
         </div>
         <div style={{ marginBottom:14 }}>
-          <label style={S.label}>Заметка</label>
+          <label style={S.label}>{t('note')}</label>
           <input style={S.input} value={note} onChange={e=>setNote(e.target.value)} placeholder="Особые пожелания..."/>
         </div>
         {err&&<div style={{ fontSize:13, color:RED, marginBottom:10, textAlign:'center', fontWeight:600 }}>{err}</div>}
       </div>
       <div style={{ position:'fixed', bottom:0, left:0, right:0, padding:16, background:PAPER, borderTop:`1px solid ${LINE}`, zIndex:10 }}>
-          <button style={S.btn()} onClick={submit} disabled={loading}>{loading?'Оформляем...':'Подтвердить заказ →'}</button>
+          <button style={S.btn()} onClick={submit} disabled={loading}>{loading?'Оформляем...':t('confirm_order')}</button>
       </div>
     </div>
   );
@@ -617,10 +754,11 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
 
 // ── SUCCESS ───────────────────────────────────────────────────
 function SuccessPage({ onClose }) {
+  const { t } = useLang();
   return (
     <div style={{ position:'fixed', inset:0, background:PAPER, zIndex:400, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24 }}>
       <div style={{ fontSize:64, marginBottom:18 }}>🎉</div>
-      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:25, color:INK, fontWeight:700, marginBottom:10, textAlign:'center' }}>Заказ принят!</div>
+      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:25, color:INK, fontWeight:700, marginBottom:10, textAlign:'center' }}>{t('order_success')}</div>
       <div style={{ fontSize:14, color:MUTED, textAlign:'center', marginBottom:26, lineHeight:1.8 }}>
         Мы свяжемся с вами в течение 30 минут<br/>для подтверждения заказа
       </div>
@@ -628,13 +766,14 @@ function SuccessPage({ onClose }) {
         <div style={{ fontSize:13, color:MUTED }}>Следи за статусом в</div>
         <div style={{ fontSize:14, fontWeight:700, color:GOLD_D, marginTop:4 }}>👤 Мой аккаунт → История заказов</div>
       </div>
-      <button style={{ ...S.btn(GOLD), maxWidth:320, width:'100%' }} onClick={onClose}>← Вернуться в каталог</button>
+      <button style={{ ...S.btn(GOLD), maxWidth:320, width:'100%' }} onClick={onClose}>{t('back_to_catalog')}</button>
     </div>
   );
 }
 
 // ── PRODUCT CARD ──────────────────────────────────────────────
 function ProductCard({ product, photo, onAddToCart, isFav, onToggleFav, isHit, onQuickView, onNotify }) {
+  const city = useCity();
   const [showSizes, setShowSizes] = useState(false);
   const [size, setSize]           = useState('');
   const [showGuide, setShowGuide] = useState(false);
@@ -652,7 +791,7 @@ function ProductCard({ product, photo, onAddToCart, isFav, onToggleFav, isHit, o
 
   const waOrder = () => {
     if(!size){ setShowSizes(true); return; }
-    const msg = encodeURIComponent(`Здравствуйте! Хочу заказать "${product.name}", размер ${size}, цена ${fmt(product.price)} сом`);
+    const msg = encodeURIComponent(`Здравствуйте! Хочу заказать "${product.name}", размер ${size}, цена ${priceStr(product.price, city)}`);
     window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${msg}`,'_blank');
   };
 
@@ -677,7 +816,7 @@ function ProductCard({ product, photo, onAddToCart, isFav, onToggleFav, isHit, o
       <div style={{ padding:13 }}>
         <div style={{ fontSize:10, color:GOLD_D, letterSpacing:1, marginBottom:3, fontWeight:700 }}>{product.id}</div>
         <div style={{ fontSize:14, fontWeight:700, color:INK, marginBottom:5, lineHeight:1.3 }}>{product.name}</div>
-        <div style={{ fontSize:19, fontWeight:800, color:GOLD_D, marginBottom:11 }}>{fmt(product.price)} сом</div>
+        <div style={{ fontSize:19, fontWeight:800, color:GOLD_D, marginBottom:11 }}>{priceStr(product.price, city)}</div>
         {showSizes && (
           <div style={{ marginBottom:11 }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:7 }}>
@@ -775,6 +914,7 @@ function ReferralBlock({ customer }) {
 
 // ── PRODUCT CHAT ──────────────────────────────────────────────
 function ProductChat({ customer, products, photos, onAddToCart, onNeedAuth }) {
+  const city = useCity();
   const [messages, setMessages] = useState([]);
   const [text, setText]         = useState('');
   const [shareMode, setShareMode] = useState(false);
@@ -845,7 +985,7 @@ function ProductChat({ customer, products, photos, onAddToCart, onNeedAuth }) {
                   </div>
                   <div style={{ padding:10 }}>
                     <div style={{ fontSize:13, fontWeight:700, color:INK }}>{msg.productName}</div>
-                    <div style={{ fontSize:15, fontWeight:800, color:GOLD_D, marginTop:3 }}>{fmt(msg.productPrice)} сом</div>
+                    <div style={{ fontSize:15, fontWeight:800, color:GOLD_D, marginTop:3 }}>{priceStr(msg.productPrice, city)}</div>
                     <button style={{ ...S.btn(GOLD), padding:'8px', fontSize:12, marginTop:8 }}
                       onClick={()=>{const p=products.find(x=>x.id===msg.productId);if(p)onAddToCart({...p,photo:msg.productPhoto,size:'',qty:1,total:p.price});}}>
                       🛍 В корзину
@@ -871,7 +1011,7 @@ function ProductChat({ customer, products, photos, onAddToCart, onNeedAuth }) {
               </div>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:13, fontWeight:600, color:INK }}>{p.name}</div>
-                <div style={{ fontSize:12, color:GOLD_D }}>{fmt(p.price)} сом</div>
+                <div style={{ fontSize:12, color:GOLD_D }}>{priceStr(p.price, city)}</div>
               </div>
             </div>
           ))}
@@ -919,11 +1059,12 @@ const getCat = (product) => {
 
 // ── PRICE RANGE SLIDER ────────────────────────────────────────
 function PriceFilter({ min, max, value, onChange }) {
+  const city = useCity();
   return (
     <div style={{ padding:'12px 14px', background:PAPER, borderRadius:12, border:`1px solid ${LINE}` }}>
       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
         <span style={{ fontSize:12, color:MUTED, fontWeight:600 }}>Цена</span>
-        <span style={{ fontSize:12, color:GOLD_D, fontWeight:700 }}>{fmt(value[0])} — {fmt(value[1])} сом</span>
+        <span style={{ fontSize:12, color:GOLD_D, fontWeight:700 }}>{priceStr(value[0], city)} — {priceStr(value[1], city)}</span>
       </div>
       <input type="range" min={min} max={max} value={value[0]}
         onChange={e=>onChange([Number(e.target.value), value[1]])}
@@ -1051,6 +1192,7 @@ function ReviewsSectionV2({ productId }) {
 
 // ── QUICK VIEW MODAL ──────────────────────────────────────────
 function QuickView({ product, photo, onAddToCart, onClose, isFav, onToggleFav }) {
+  const city = useCity();
   const [size, setSize] = useState('');
   const [added, setAdded] = useState(false);
   const SIZES = ['36','37','38','39','40','41','42'];
@@ -1076,7 +1218,7 @@ function QuickView({ product, photo, onAddToCart, onClose, isFav, onToggleFav })
           <div style={{ flex:1 }}>
             <div style={{ fontSize:11, color:GOLD_D, fontWeight:700, marginBottom:4 }}>{product.id}</div>
             <div style={{ fontSize:16, fontWeight:700, color:INK, marginBottom:6 }}>{product.name}</div>
-            <div style={{ fontSize:22, fontWeight:800, color:GOLD_D }}>{fmt(product.price)} сом</div>
+            <div style={{ fontSize:22, fontWeight:800, color:GOLD_D }}>{priceStr(product.price, city)}</div>
             <div style={{ fontSize:12, color:avail>5?GREEN:RED, marginTop:4, fontWeight:600 }}>
               {avail>5?'✓ В наличии':`Осталось ${avail} пар`}
             </div>
@@ -1207,6 +1349,7 @@ function useViewCount(productId) {
 
 // ── PRODUCT PAGE ──────────────────────────────────────────────
 function ProductPage({ product, photos, onAddToCart, isFav, onToggleFav, onClose, allProducts, addToast, onView }) {
+  const city = useCity();
   const [size, setSize]       = useState('');
   const [added, setAdded]     = useState(false);
   const [activePhoto, setActivePhoto] = useState(0);
@@ -1229,7 +1372,7 @@ function ProductPage({ product, photos, onAddToCart, isFav, onToggleFav, onClose
 
   const share = () => {
     const url = `${window.location.origin}?product=${product.id}`;
-    const text = `${product.name} — ${fmt(product.price)} сом\n${url}`;
+    const text = `${product.name} — ${priceStr(product.price, city)}\n${url}`;
     if(navigator.share) navigator.share({title:product.name, text}).catch(()=>{});
     else { navigator.clipboard.writeText(url).catch(()=>{}); addToast('🔗 Ссылка скопирована'); }
   };
@@ -1287,7 +1430,7 @@ function ProductPage({ product, photos, onAddToCart, isFav, onToggleFav, onClose
           <div style={{ fontSize:11, color:GOLD_D, fontWeight:700, marginBottom:4 }}>{product.id}</div>
           <div style={{ fontFamily:"'Playfair Display',serif", fontSize:22, fontWeight:700, color:INK, marginBottom:6, lineHeight:1.2 }}>{product.name}</div>
           <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:14 }}>
-            <div style={{ fontSize:28, fontWeight:800, color:GOLD_D }}>{fmt(product.price)} сом</div>
+            <div style={{ fontSize:28, fontWeight:800, color:GOLD_D }}>{priceStr(product.price, city)}</div>
             <div style={{ fontSize:13, fontWeight:700, color:avail>5?GREEN:avail>0?GOLD_D:RED }}>
               {avail>5?'✓ В наличии':avail>0?`Осталось ${avail} пар`:'Нет в наличии'}
             </div>
@@ -1329,7 +1472,7 @@ function ProductPage({ product, photos, onAddToCart, isFav, onToggleFav, onClose
                     </div>
                     <div style={{ padding:9 }}>
                       <div style={{ fontSize:12, fontWeight:700, color:INK, lineHeight:1.3, marginBottom:4 }}>{p.name}</div>
-                      <div style={{ fontSize:14, fontWeight:800, color:GOLD_D }}>{fmt(p.price)} сом</div>
+                      <div style={{ fontSize:14, fontWeight:800, color:GOLD_D }}>{priceStr(p.price, city)}</div>
                     </div>
                   </div>
                 ))}
@@ -1346,7 +1489,7 @@ function ProductPage({ product, photos, onAddToCart, isFav, onToggleFav, onClose
       {avail>0 && (
         <div style={{ position:'fixed', bottom:0, left:0, right:0, padding:16, background:PAPER, borderTop:`1px solid ${LINE}`, zIndex:10 }}>
           <div style={{ maxWidth:480, margin:'0 auto', display:'flex', gap:10 }}>
-            <a href={`https://wa.me/992876982424?text=${encodeURIComponent('Хочу заказать: '+product.name+' р.'+size)}`}
+            <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Хочу заказать: '+product.name+' р.'+size)}`}
               target="_blank" style={{ ...S.btnGhost(GREEN), display:'flex', alignItems:'center', justifyContent:'center', textDecoration:'none', padding:'14px', flexShrink:0 }}>
               💬
             </a>
@@ -1424,6 +1567,7 @@ function CustomerPhotos({ productId, customer }) {
 
 // ── RECENTLY VIEWED ───────────────────────────────────────────
 function RecentlyViewed({ productIds, allProducts, photos, onView }) {
+  const city = useCity();
   const recent = productIds.map(id=>allProducts.find(p=>p.id===id)).filter(Boolean).slice(0,5);
   if(!recent.length) return null;
   return (
@@ -1440,7 +1584,7 @@ function RecentlyViewed({ productIds, allProducts, photos, onView }) {
               </div>
               <div style={{ padding:'8px 9px' }}>
                 <div style={{ fontSize:12, fontWeight:700, color:INK, lineHeight:1.3 }}>{p.name}</div>
-                <div style={{ fontSize:13, fontWeight:800, color:GOLD_D, marginTop:3 }}>{fmt(p.price)} сом</div>
+                <div style={{ fontSize:13, fontWeight:800, color:GOLD_D, marginTop:3 }}>{priceStr(p.price, city)}</div>
               </div>
             </div>
           );
@@ -1536,6 +1680,7 @@ function OutfitBuilder({ products, photos, onAddToCart }) {
     {id:'evening', label:'На вечер',   icon:'✨', colors:['#C0392B','#2C3E50','#F39C12']},
     {id:'sport',   label:'Спортивный', icon:'🏃', colors:['#27AE60','#2980B9','#E74C3C']},
   ];
+  const city = useCity();
   const [occasion, setOccasion] = useState('');
   const [recs, setRecs]         = useState([]);
 
@@ -1580,7 +1725,7 @@ function OutfitBuilder({ products, photos, onAddToCart }) {
                   </div>
                   <div style={{ padding:9 }}>
                     <div style={{ fontSize:12, fontWeight:700, color:INK }}>{p.name}</div>
-                    <div style={{ fontSize:13, fontWeight:800, color:GOLD_D, marginTop:2 }}>{fmt(p.price)} сом</div>
+                    <div style={{ fontSize:13, fontWeight:800, color:GOLD_D, marginTop:2 }}>{priceStr(p.price, city)}</div>
                     <button style={{ ...S.btn(GOLD), padding:'7px', fontSize:11, marginTop:6 }}
                       onClick={()=>onAddToCart({...p,photo:src||'',size:'',qty:1,total:p.price})}>
                       В корзину
@@ -1690,37 +1835,29 @@ const Analytics = {
 };
 
 // ── PUSH NOTIFICATIONS ────────────────────────────────────────
-async function subscribeToPush(addToast) {
-  try {
-    if(!('Notification' in window)){
-      addToast('❌ Уведомления не поддерживаются в этом браузере');
-      return false;
-    }
-    const perm = await Notification.requestPermission();
-    if(perm === 'granted') {
-      addToast('🔔 Уведомления включены!');
-      // Store subscription in Firebase
-      await addDoc(collection(db,'push_subscribers'),{
-        date: nowStr(),
-        ua: navigator.userAgent
-      }).catch(()=>{});
-      return true;
-    } else {
-      addToast('❌ Доступ к уведомлениям запрещён');
-      return false;
-    }
-  } catch(e) {
-    addToast('❌ Не удалось включить уведомления');
-    return false;
-  }
-}
+// ⚙️ Get this from Firebase Console → Project settings → Cloud Messaging →
+// Web Push certificates (generate a key pair if none exists yet).
+const VAPID_KEY = 'REPLACE_WITH_YOUR_VAPID_KEY';
 
-function sendTestNotification() {
-  if(Notification.permission === 'granted') {
-    new Notification('Queen Star 👠', {
-      body: 'Новые товары уже в каталоге!',
-      icon: '/icon-192.png'
-    });
+// Requests permission, registers an FCM token, and links it to the logged-in
+// customer's Firestore doc so the orderStatusPush Cloud Function (see
+// functions/index.js) can notify them when their order status changes.
+async function enablePush(customer, addToast) {
+  if (!messaging) { addToast('❌ Уведомления не поддерживаются в этом браузере'); return false; }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { addToast('❌ Доступ к уведомлениям запрещён'); return false; }
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+    if (!token) { addToast('❌ Не удалось получить токен уведомлений'); return false; }
+    if (customer) {
+      const phoneId = customer.phone.replace(/\D/g,'');
+      await setDoc(doc(db,'shop_customers',phoneId), { fcmTokens: arrayUnion(token) }, { merge:true });
+    }
+    addToast('🔔 Уведомления включены!');
+    return true;
+  } catch {
+    addToast('❌ Не удалось включить уведомления — проверьте VAPID_KEY и что функции задеплоены');
+    return false;
   }
 }
 
@@ -1801,17 +1938,15 @@ export default function ShopApp() {
   const [toasts, setToasts]     = useState([]);
   const [showFavOnly, setShowFavOnly] = useState(false);
   const [category, setCategory]     = useState('all');
-  const [selSizes, setSelSizes]     = useState([]);
   const [priceRange, setPriceRange] = useState([0, 1000]);
   const [showFilters, setShowFilters] = useState(false);
   const [quickView, setQuickView]     = useState(null);
   const [notifyProduct, setNotifyProduct] = useState(null);
   const [openProduct, setOpenProduct]   = useState(null);
   const [showConsultant, setShowConsultant] = useState(false);
-  const [selSize, setSelSize]           = useState('');
   const [darkMode, setDarkMode]         = useState(false);
+  const [lang, setLang]                 = useState('ru');
   const [showPayment, setShowPayment]   = useState(false);
-  const [pushEnabled, setPushEnabled]   = useState(false);
   const [pendingOrder, setPendingOrder] = useState(null);
   const [recentlyViewed, setRecentlyViewed] = useState([]);
   const [city, setCity]             = useState('');
@@ -1827,8 +1962,15 @@ export default function ShopApp() {
 
   useEffect(()=>{
     Analytics.pageView();
-    // Check push permission
-    if('Notification' in window && Notification.permission === 'granted') setPushEnabled(true);
+  },[]);
+
+  // Show a toast for push notifications received while the app is open
+  useEffect(()=>{
+    if(!messaging) return;
+    const unsub = onMessage(messaging, payload => {
+      addToast(`🔔 ${payload.notification?.title||'Queen Star'}: ${payload.notification?.body||''}`);
+    });
+    return ()=>unsub && unsub();
   },[]);
 
   useEffect(()=>{
@@ -1848,9 +1990,11 @@ export default function ShopApp() {
       const c = localStorage.getItem('qs_customer');
       const f = localStorage.getItem('qs_favs');
       const ci = localStorage.getItem('qs_city');
+      const l = localStorage.getItem('qs_lang');
       if(c) setCustomer(JSON.parse(c));
       if(f) setFavs(JSON.parse(f));
       if(ci) setCity(ci); else setShowCitySelector(true);
+      if(l && DICT[l]) setLang(l);
       // Check referral code in URL
       const params = new URLSearchParams(window.location.search);
       const ref = params.get('ref');
@@ -1892,6 +2036,7 @@ export default function ShopApp() {
     }
   };
   const saveCity = (c) => { setCity(c); try{ localStorage.setItem('qs_city',c); }catch{}; };
+  const saveLang = (l) => { setLang(l); try{ localStorage.setItem('qs_lang',l); }catch{}; };
   // Track recently viewed
   const viewProduct = (product) => {
     setOpenProduct(product);
@@ -1921,11 +2066,26 @@ export default function ShopApp() {
   };
 
   const addToCart = (item) => {
-    setCart(p=>[...p,item]);
+    setCart(p=>{
+      const idx = p.findIndex(x=>x.id===item.id && x.size===item.size);
+      if(idx>=0){
+        const next = [...p];
+        const qty = next[idx].qty + item.qty;
+        next[idx] = { ...next[idx], qty, total: next[idx].price*qty };
+        return next;
+      }
+      return [...p, item];
+    });
     addToast('🛍 Добавлено в корзину');
     Analytics.addToCart(item.id, item.name, item.price);
   };
   const removeFromCart = (i) => setCart(p=>p.filter((_,idx)=>idx!==i));
+  const updateCartQty = (i, delta) => setCart(p=>{
+    const next = [...p];
+    const qty = Math.max(1, next[i].qty + delta);
+    next[i] = { ...next[i], qty, total: next[i].price*qty };
+    return next;
+  });
   const checkout = (d) => {
     setDiscount(d);
     setScreen('catalog');
@@ -1952,7 +2112,6 @@ export default function ShopApp() {
     const matchCategory2 = !p.id.toUpperCase().startsWith('КМ') && !p.id.toUpperCase().startsWith('ЖЗ');
     const matchCat = category==='all' || getCat(p)===category;
     const matchPrice = p.price >= priceRange[0] && p.price <= priceRange[1];
-    const matchSize = !selSize; // size filter - show all (size info per product not stored separately)
     return matchSearch && matchFav && matchCity && matchCat && matchPrice && matchCategory2;
   });
   if(sortBy==='price_asc')  filtered = [...filtered].sort((a,b)=>a.price-b.price);
@@ -1968,7 +2127,11 @@ export default function ShopApp() {
     </div>
   );
 
+  const t = (key) => (DICT[lang]||DICT.ru)[key];
+
   return(
+    <CityContext.Provider value={city}>
+    <LangContext.Provider value={lang}>
     <div style={{ background:BG, minHeight:'100vh', color:INK, fontFamily:"'Manrope',sans-serif" }}>
       <style>{`${FONTS}*{box-sizing:border-box;margin:0;padding:0;}input::placeholder,textarea::placeholder{color:#B8A98E;}button:disabled{opacity:0.6;}`}</style>
       <Toast toasts={toasts}/>
@@ -2012,7 +2175,7 @@ export default function ShopApp() {
           </div>
         </div>
       )}
-      {screen==='cart' && <CartPage cart={cart} onClose={()=>setScreen('catalog')} onCheckout={checkout} onRemove={removeFromCart} customer={customer} onNeedAuth={()=>{setScreen('catalog');setShowAuth(true);}}/>}
+      {screen==='cart' && <CartPage cart={cart} onClose={()=>setScreen('catalog')} onCheckout={checkout} onRemove={removeFromCart} onQtyChange={updateCartQty} customer={customer} onNeedAuth={()=>{setScreen('catalog');setShowAuth(true);}}/>}
       {screen==='account' && customer && <AccountPage customer={customer} onClose={()=>setScreen('catalog')} onLogout={logout} addToast={addToast}/>}
 
       {darkMode && <style>{'body,#root{background:#0F0D0C!important;}input,select,textarea{background:#1A1614!important;color:#F0EBE3!important;border-color:#2E2520!important;}'}</style>}
@@ -2022,10 +2185,10 @@ export default function ShopApp() {
           <div style={{ background:`linear-gradient(135deg,${INK},#3A2C20)`, borderRadius:20, padding:'22px 20px', marginBottom:16, color:'#fff', textAlign:'center', position:'relative', overflow:'hidden' }}>
             <div style={{ position:'absolute', top:-30, right:-30, width:110, height:110, borderRadius:'50%', background:GOLD+'22' }}/>
             <div style={{ fontFamily:"'Playfair Display',serif", fontSize:25, letterSpacing:0.5, marginBottom:5, fontWeight:700, position:'relative' }}>Queen <span style={{color:GOLD_L}}>Star</span></div>
-            <div style={{ fontSize:12, opacity:0.8, marginBottom:14, position:'relative' }}>Женская обувь · Душанбе · Доставка по городу</div>
+            <div style={{ fontSize:12, opacity:0.8, marginBottom:14, position:'relative' }}>{t('tagline')}</div>
             <div style={{ display:'flex', justifyContent:'center', gap:14, flexWrap:'wrap', position:'relative' }}>
-              {['🚚 Доставка','💳 Нал/Перевод','📦 Возврат 7 дней'].map(t=>(
-                <div key={t} style={{ fontSize:10.5, opacity:0.85, fontWeight:600 }}>{t}</div>
+              {[t('perk_delivery'),t('perk_pay'),t('perk_return')].map(perk=>(
+                <div key={perk} style={{ fontSize:10.5, opacity:0.85, fontWeight:600 }}>{perk}</div>
               ))}
             </div>
           </div>
@@ -2044,13 +2207,17 @@ export default function ShopApp() {
               style={{ ...S.btnGhost(darkMode?GOLD_D:'#555'), fontSize:12, padding:'7px 12px' }}>
               {darkMode?'☀️ Светлая':'🌙 Тёмная'}
             </button>
+            <button onClick={()=>saveLang(lang==='ru'?'tj':lang==='tj'?'en':'ru')}
+              style={{ ...S.btnGhost('#555'), fontSize:12, padding:'7px 12px' }}>
+              🌐 {LANG_LABEL[lang]}
+            </button>
 
           </div>
           <FlashSaleBanner/>
 
           {/* Search */}
           <div style={{ position:'relative', marginBottom:10 }}>
-            <input style={{ ...S.input, paddingLeft:42 }} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Поиск товаров..."/>
+            <input style={{ ...S.input, paddingLeft:42 }} value={search} onChange={e=>setSearch(e.target.value)} placeholder={t('search_ph')}/>
             <span style={{ position:'absolute', left:14, top:'50%', transform:'translateY(-50%)', fontSize:16, color:MUTED }}>🔍</span>
           </div>
 
@@ -2058,40 +2225,32 @@ export default function ShopApp() {
           <div style={{ display:'flex', gap:6, overflowX:'auto', marginBottom:10, paddingBottom:2 }}>
             {CATEGORIES.map(cat=>(
               <div key={cat.id} onClick={()=>setCategory(cat.id)} style={S.chip(category===cat.id)}>
-                {cat.icon} {cat.label}
+                {cat.icon} {t(cat.id)}
               </div>
             ))}
           </div>
           {/* Filter bar */}
           <div style={{ display:'flex', gap:6, marginBottom:12, overflowX:'auto' }}>
             <div onClick={()=>setShowFavOnly(!showFavOnly)} style={S.chip(showFavOnly)}>❤️{favs.length>0?` ${favs.length}`:''}</div>
-            <div onClick={()=>setSortBy('default')} style={S.chip(sortBy==='default')}>Популярное</div>
-            <div onClick={()=>setSortBy('new')} style={S.chip(sortBy==='new')}>Новинки</div>
-            <div onClick={()=>setSortBy('price_asc')} style={S.chip(sortBy==='price_asc')}>Цена ↑</div>
-            <div onClick={()=>setSortBy('price_desc')} style={S.chip(sortBy==='price_desc')}>Цена ↓</div>
-            <div onClick={()=>setShowFilters(!showFilters)} style={S.chip(showFilters)}>⚙️ Фильтры</div>
-            <div onClick={()=>setShowConsultant(true)} style={S.chip(false)}>💬 Консультант</div>
+            <div onClick={()=>setSortBy('default')} style={S.chip(sortBy==='default')}>{t('popular')}</div>
+            <div onClick={()=>setSortBy('new')} style={S.chip(sortBy==='new')}>{t('new_')}</div>
+            <div onClick={()=>setSortBy('price_asc')} style={S.chip(sortBy==='price_asc')}>{t('price_up')}</div>
+            <div onClick={()=>setSortBy('price_desc')} style={S.chip(sortBy==='price_desc')}>{t('price_down')}</div>
+            <div onClick={()=>setShowFilters(!showFilters)} style={S.chip(showFilters)}>{t('filters')}</div>
+            <div onClick={()=>setShowConsultant(true)} style={S.chip(false)}>{t('consultant')}</div>
           </div>
           {showFilters && (
             <div style={{ marginBottom:14 }}>
               <PriceFilter min={globalMin} max={globalMax} value={priceRange} onChange={setPriceRange}/>
-              <div style={{ marginTop:10 }}>
-                <div style={{ fontSize:11, color:MUTED, fontWeight:700, marginBottom:6 }}>РАЗМЕР</div>
-                <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                  {['36','37','38','39','40','41','42'].map(s=>(
-                    <div key={s} onClick={()=>setSelSize(selSize===s?'':s)} style={S.chip(selSize===s)}>{s}</div>
-                  ))}
-                </div>
-              </div>
             </div>
           )}
 
-          <div style={{ fontSize:12, color:MUTED, marginBottom:12, fontWeight:600 }}>{filtered.length} товаров</div>
+          <div style={{ fontSize:12, color:MUTED, marginBottom:12, fontWeight:600 }}>{t('products_count')(filtered.length)}</div>
 
           {filtered.length===0 ? (
             <div style={{ textAlign:'center', padding:'50px 0', color:MUTED }}>
               <div style={{ fontSize:38, marginBottom:12 }}>😔</div>
-              {showFavOnly ? 'Нет избранных товаров' : 'Ничего не найдено'}
+              {showFavOnly ? t('no_favs') : t('nothing_found')}
             </div>
           ) : (
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
@@ -2121,7 +2280,7 @@ export default function ShopApp() {
 
           {/* Contact */}
           <div style={{ ...S.card, padding:18, marginTop:14, textAlign:'center' }}>
-            <div style={{ fontSize:14, fontWeight:700, color:INK, marginBottom:12 }}>Связаться с нами</div>
+            <div style={{ fontSize:14, fontWeight:700, color:INK, marginBottom:12 }}>{t('contact_us')}</div>
             <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
               <a href="https://t.me/yoqubzodaamir" target="_blank" style={{ ...S.btnGhost(BLUE), textDecoration:'none', display:'inline-block' }}>📱 Telegram</a>
               <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" style={{ ...S.btnGhost(GREEN), textDecoration:'none', display:'inline-block' }}>💬 WhatsApp</a>
@@ -2139,5 +2298,7 @@ export default function ShopApp() {
         </button>
       )}
     </div>
+    </LangContext.Provider>
+    </CityContext.Provider>
   );
 }
