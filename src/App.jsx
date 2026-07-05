@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useContext, createContext } from "react";
 import { db, messaging } from './firebase.js';
-import { doc, getDoc, getDocs, addDoc, collection, onSnapshot, query, where, setDoc, orderBy, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, getDocs, addDoc, collection, onSnapshot, query, where, setDoc, orderBy, arrayUnion, updateDoc } from 'firebase/firestore';
 import { getToken, onMessage } from 'firebase/messaging';
 
 // ── THEME ─────────────────────────────────────────────────────
@@ -249,6 +249,21 @@ function FaqSection() {
   );
 }
 
+// ── PRIVACY POLICY ─────────────────────────────────────────────
+function PrivacyPolicy() {
+  return (
+    <div style={{ ...S.card, padding:18 }}>
+      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:17, fontWeight:700, color:INK, marginBottom:12 }}>Политика конфиденциальности</div>
+      <div style={{ fontSize:13, color:MUTED, lineHeight:1.8 }}>
+        <p style={{ marginBottom:10 }}>Для оформления заказа мы собираем ваше имя и номер телефона. Эти данные используются только для обработки и доставки заказа, связи с вами по поводу статуса заказа и программы лояльности.</p>
+        <p style={{ marginBottom:10 }}>Мы не передаём ваши данные третьим лицам, кроме случаев, необходимых для доставки заказа (например, курьерской службе).</p>
+        <p style={{ marginBottom:10 }}>История заказов, отзывы и фото, которые вы добавляете, привязаны к вашему аккаунту (номер телефона + PIN-код) и видны только вам и продавцу.</p>
+        <p style={{ marginBottom:10 }}>Вы можете в любой момент попросить удалить свои данные, написав нам в WhatsApp или Telegram — контакты указаны на главной странице.</p>
+      </div>
+    </div>
+  );
+}
+
 // ── HEADER ────────────────────────────────────────────────────
 function Header({ cartCount, favCount, onCart, onAccount, onFav, onFaq, customer }) {
   return (
@@ -350,7 +365,9 @@ function AuthModal({ onClose, onLogin }) {
             onKeyDown={e=>{if(e.key==='Enter')confirmPin();}} placeholder="••••" autoFocus/>
           {err&&<div style={{ fontSize:12, color:RED, marginBottom:10 }}>{err}</div>}
           <button style={S.btn()} onClick={confirmPin} disabled={loading}>Войти</button>
-          <button style={{ ...S.btn(MUTED), marginTop:8, opacity:0.8 }} onClick={()=>{setStep('phone');setPin('');setErr('');}}>← Назад</button>
+          <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent('Здравствуйте! Забыл(а) PIN от аккаунта, мой номер: '+phone)}`} target="_blank"
+            style={{ display:'block', textAlign:'center', fontSize:12, color:BLUE, marginTop:12, textDecoration:'none' }}>Забыли PIN? Написать в WhatsApp</a>
+          <button style={{ ...S.btn(MUTED), marginTop:12, opacity:0.8 }} onClick={()=>{setStep('phone');setPin('');setErr('');}}>← Назад</button>
         </>)}
         {step==='name'&&(<>
           <div style={{ background:SAND, borderRadius:10, padding:11, marginBottom:14, fontSize:13, color:GOLD_D, fontWeight:600 }}>📱 {phone}</div>
@@ -422,12 +439,12 @@ function LeaveReview({ order, customer, onClose }) {
 }
 
 // ── ACCOUNT PAGE ──────────────────────────────────────────────
-function AccountPage({ customer, onClose, onLogout, addToast }) {
+function AccountPage({ customer, onClose, onLogout, addToast, pushOn, setPushOn }) {
   const city = useCity();
   const { t } = useLang();
   const [orders, setOrders]       = useState([]);
   const [reviewFor, setReviewFor] = useState(null);
-  const [pushOn, setPushOn]       = useState(typeof Notification!=='undefined' && Notification.permission==='granted');
+  const [confirmCancel, setConfirmCancel] = useState(null);
   const prevStatuses = useRef({});
 
   useEffect(()=>{
@@ -450,6 +467,14 @@ function AccountPage({ customer, onClose, onLogout, addToast }) {
   const ST = {
     new:{l:'Принят',c:GOLD}, delivery:{l:'В доставке',c:BLUE},
     done:{l:'Получен',c:GREEN}, cancelled:{l:'Отменён',c:RED}
+  };
+
+  const cancelOrder = async (order) => {
+    try {
+      await updateDoc(doc(db,'shop_orders',order.id), { status:'cancelled' });
+      addToast('Заказ отменён');
+      setConfirmCancel(null);
+    } catch { addToast('❌ Не удалось отменить заказ'); }
   };
 
   return (
@@ -511,6 +536,11 @@ function AccountPage({ customer, onClose, onLogout, addToast }) {
               <OrderTimeline status={o.status}/>
               {o.status==='done' && (
                 <button style={{ ...S.btnGhost(GOLD), padding:'7px 12px', fontSize:12, marginTop:8 }} onClick={()=>setReviewFor(o)}>⭐ Оставить отзыв</button>
+              )}
+              {o.status==='new' && (
+                <button style={{ ...S.btnGhost(RED), padding:'7px 12px', fontSize:12, marginTop:8 }} onClick={()=>confirmCancel===o.id?cancelOrder(o):setConfirmCancel(o.id)}>
+                  {confirmCancel===o.id?'⚠ Нажмите ещё раз для отмены':'✕ Отменить заказ'}
+                </button>
               )}
             </div>
           );
@@ -670,7 +700,16 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
         const prevPoints = custSnap.exists() ? (custSnap.data().loyaltyPoints||0) : 0;
         await setDoc(doc(db,'shop_customers', phoneId), { loyaltyPoints: prevPoints + 5 }, { merge: true });
       } catch(le){ console.warn('Cashback:', le); }
-      onSuccess();
+      const lines = cart.map(item=>`• ${item.name} р.${item.size} × ${item.qty} — ${priceStr(Math.round(item.total*(1-discount/100)), city)}`);
+      const summary = [
+        `Новый заказ от ${customer.name} (${customer.phone}):`,
+        ...lines,
+        deliveryType==='delivery' ? `Доставка: ${address.trim()}` : 'Самовывоз из магазина',
+        `Оплата: ${payment==='cash'?'наличные':'перевод'}`,
+        note.trim() ? `Заметка: ${note.trim()}` : null,
+        `Итого: ${priceStr(grandTotal, city)}`,
+      ].filter(Boolean).join('\n');
+      onSuccess(summary);
     } catch { setErr('Ошибка. Попробуй снова.'); }
     setLoading(false);
   };
@@ -756,15 +795,21 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
 }
 
 // ── SUCCESS ───────────────────────────────────────────────────
-function SuccessPage({ onClose }) {
+function SuccessPage({ onClose, orderSummary }) {
   const { t } = useLang();
   return (
-    <div style={{ position:'fixed', inset:0, background:PAPER, zIndex:400, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24 }}>
+    <div style={{ position:'fixed', inset:0, background:PAPER, zIndex:400, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24, overflowY:'auto' }}>
       <div style={{ fontSize:64, marginBottom:18 }}>🎉</div>
       <div style={{ fontFamily:"'Playfair Display',serif", fontSize:25, color:INK, fontWeight:700, marginBottom:10, textAlign:'center' }}>{t('order_success')}</div>
-      <div style={{ fontSize:14, color:MUTED, textAlign:'center', marginBottom:26, lineHeight:1.8 }}>
-        Мы свяжемся с вами в течение 30 минут<br/>для подтверждения заказа
+      <div style={{ fontSize:14, color:MUTED, textAlign:'center', marginBottom:20, lineHeight:1.8 }}>
+        Чтобы мы подтвердили заказ быстрее — отправьте детали нам в WhatsApp одним нажатием
       </div>
+      {orderSummary && (
+        <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(orderSummary)}`} target="_blank"
+          style={{ ...S.btn(GREEN), maxWidth:320, width:'100%', marginBottom:14, textDecoration:'none', display:'block', textAlign:'center', boxSizing:'border-box' }}>
+          📲 Отправить заказ в WhatsApp
+        </a>
+      )}
       <div style={{ ...S.card, padding:16, marginBottom:24, width:'100%', maxWidth:320, textAlign:'center' }}>
         <div style={{ fontSize:13, color:MUTED }}>Следи за статусом в</div>
         <div style={{ fontSize:14, fontWeight:700, color:GOLD_D, marginTop:4 }}>👤 Мой аккаунт → История заказов</div>
@@ -1819,6 +1864,13 @@ function ZoomableImage({ src, alt, style }) {
 }
 
 // ── ANALYTICS TRACKER ─────────────────────────────────────────
+// Forwards to Google Analytics / Meta Pixel if the site owner configured real
+// IDs in index.html — no-ops silently otherwise, so this is safe either way.
+const adEvent = (gaName, fbName, params={}) => {
+  try { if(typeof window.gtag==='function') window.gtag('event', gaName, params); } catch {}
+  try { if(typeof window.fbq==='function') window.fbq('track', fbName, params); } catch {}
+};
+
 const Analytics = {
   track: (event, data={}) => {
     try {
@@ -1831,10 +1883,10 @@ const Analytics = {
     } catch {}
   },
   pageView: ()   => Analytics.track('page_view'),
-  productView: (id, name) => Analytics.track('product_view',{productId:id, productName:name}),
-  addToCart: (id, name, price) => Analytics.track('add_to_cart',{productId:id, productName:name, price}),
-  checkout: (total) => Analytics.track('checkout_start',{total}),
-  order: (total) => Analytics.track('order_placed',{total}),
+  productView: (id, name) => { Analytics.track('product_view',{productId:id, productName:name}); adEvent('view_item','ViewContent',{item_id:id, item_name:name}); },
+  addToCart: (id, name, price) => { Analytics.track('add_to_cart',{productId:id, productName:name, price}); adEvent('add_to_cart','AddToCart',{item_id:id, item_name:name, value:price, currency:'TJS'}); },
+  checkout: (total) => { Analytics.track('checkout_start',{total}); adEvent('begin_checkout','InitiateCheckout',{value:total, currency:'TJS'}); },
+  order: (total) => { Analytics.track('order_placed',{total}); adEvent('purchase','Purchase',{value:total, currency:'TJS'}); },
 };
 
 // ── PUSH NOTIFICATIONS ────────────────────────────────────────
@@ -1930,11 +1982,14 @@ export default function ShopApp() {
   const [cart, setCart]         = useState([]);
   const [favs, setFavs]         = useState([]);
   const [customer, setCustomer] = useState(null);
+  const [pushOn, setPushOn]     = useState(typeof Notification!=='undefined' && Notification.permission==='granted');
   const [screen, setScreen]     = useState('catalog');
   const [showAuth, setShowAuth] = useState(false);
   const [showOrder, setShowOrder] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [lastOrderSummary, setLastOrderSummary] = useState('');
   const [showFaq, setShowFaq]   = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [discount, setDiscount] = useState(0);
   const [search, setSearch]     = useState('');
   const [sortBy, setSortBy]     = useState('default');
@@ -2096,7 +2151,7 @@ export default function ShopApp() {
     Analytics.checkout(Math.round(total*(1-d/100)));
     setShowOrder(true);
   };
-  const onOrderSuccess = () => { setCart([]); setShowOrder(false); setShowSuccess(true); };
+  const onOrderSuccess = (summary) => { setCart([]); setShowOrder(false); setLastOrderSummary(summary||''); setShowSuccess(true); };
 
   // "Hit" products — top 3 by lowest stock ratio, simple deterministic heuristic
   const hitIds = [...products]
@@ -2167,7 +2222,7 @@ export default function ShopApp() {
           <ProductChat customer={customer} products={products} photos={photos} onAddToCart={addToCart} onNeedAuth={()=>{setScreen2('');setShowAuth(true);}}/>
         </div>
       )}
-      {showSuccess && <SuccessPage onClose={()=>setShowSuccess(false)}/>}
+      {showSuccess && <SuccessPage onClose={()=>setShowSuccess(false)} orderSummary={lastOrderSummary}/>}
       {showOrder && customer && <OrderForm cart={cart} customer={customer} discount={discount} onClose={()=>setShowOrder(false)} onSuccess={onOrderSuccess}/>}
       {showFaq && (
         <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }} onClick={()=>setShowFaq(false)}>
@@ -2178,8 +2233,17 @@ export default function ShopApp() {
           </div>
         </div>
       )}
+      {showPrivacy && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }} onClick={()=>setShowPrivacy(false)}>
+          <div style={{ background:BG, borderRadius:'24px 24px 0 0', padding:20, width:'100%', maxWidth:480, maxHeight:'80vh', overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
+            <div style={{ width:36, height:4, background:LINE, borderRadius:2, margin:'0 auto 14px' }}/>
+            <PrivacyPolicy/>
+            <button style={{ ...S.btn(GOLD), marginTop:16 }} onClick={()=>setShowPrivacy(false)}>Закрыть</button>
+          </div>
+        </div>
+      )}
       {screen==='cart' && <CartPage cart={cart} onClose={()=>setScreen('catalog')} onCheckout={checkout} onRemove={removeFromCart} onQtyChange={updateCartQty} customer={customer} onNeedAuth={()=>{setScreen('catalog');setShowAuth(true);}}/>}
-      {screen==='account' && customer && <AccountPage customer={customer} onClose={()=>setScreen('catalog')} onLogout={logout} addToast={addToast}/>}
+      {screen==='account' && customer && <AccountPage customer={customer} onClose={()=>setScreen('catalog')} onLogout={logout} addToast={addToast} pushOn={pushOn} setPushOn={setPushOn}/>}
 
       {darkMode && <style>{'body,#root{background:#0F0D0C!important;}input,select,textarea{background:#1A1614!important;color:#F0EBE3!important;border-color:#2E2520!important;}'}</style>}
       {screen==='catalog' && (
@@ -2216,6 +2280,14 @@ export default function ShopApp() {
             </button>
 
           </div>
+          {customer && !pushOn && (
+            <div style={{ ...S.card, padding:'12px 14px', marginBottom:14, display:'flex', alignItems:'center', gap:10 }}>
+              <div style={{ fontSize:20 }}>🔔</div>
+              <div style={{ flex:1, fontSize:12, color:INK }}>Включи уведомления, чтобы узнавать о статусе заказа</div>
+              <button style={{ ...S.btnGhost(GOLD), padding:'7px 11px', fontSize:11, whiteSpace:'nowrap' }}
+                onClick={async()=>{ if(await enablePush(customer, addToast)) setPushOn(true); }}>Включить</button>
+            </div>
+          )}
           <FlashSaleBanner/>
 
           {/* Search */}
@@ -2290,6 +2362,7 @@ export default function ShopApp() {
               <a href="https://instagram.com/queenstar.stor" target="_blank" style={{ ...S.btnGhost(GOLD), textDecoration:'none', display:'inline-block' }}>📸 Instagram</a>
             </div>
             <div style={{ fontSize:11, color:MUTED, marginTop:14 }}>Душанбе, Таджикистан</div>
+            <button onClick={()=>setShowPrivacy(true)} style={{ background:'none', border:'none', color:MUTED, fontSize:11, textDecoration:'underline', cursor:'pointer', marginTop:8, fontFamily:'inherit' }}>Политика конфиденциальности</button>
           </div>
         </div>
       )}

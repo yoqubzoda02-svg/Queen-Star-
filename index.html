@@ -14,6 +14,29 @@
     <meta property="og:description" content="Магазин женской обуви в Душанбе. Доставка по Таджикистану, самовывоз, наличные и перевод."/>
     <meta property="og:locale" content="ru_RU"/>
     <meta name="twitter:card" content="summary"/>
+    <script>
+      // ⚙️ Аналитика для рекламы — вставьте свои ID, чтобы включить.
+      // Пока здесь плейсхолдеры с "XXXX" — ничего не грузится и не отправляется.
+      // GA4: analytics.google.com → Admin → Data Streams → ваш поток → Measurement ID
+      // Meta Pixel: business.facebook.com → Events Manager → ваш пиксель → Pixel ID
+      window.GA_MEASUREMENT_ID = 'G-XXXXXXXXXX';
+      window.META_PIXEL_ID = 'XXXXXXXXXXXXXXX';
+      if (window.GA_MEASUREMENT_ID && window.GA_MEASUREMENT_ID.indexOf('XXXX') === -1) {
+        var gaScript = document.createElement('script');
+        gaScript.async = true;
+        gaScript.src = 'https://www.googletagmanager.com/gtag/js?id=' + window.GA_MEASUREMENT_ID;
+        document.head.appendChild(gaScript);
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function(){ window.dataLayer.push(arguments); };
+        window.gtag('js', new Date());
+        window.gtag('config', window.GA_MEASUREMENT_ID);
+      }
+      if (window.META_PIXEL_ID && window.META_PIXEL_ID.indexOf('XXXX') === -1) {
+        !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+        window.fbq('init', window.META_PIXEL_ID);
+        window.fbq('track', 'PageView');
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
