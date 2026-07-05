@@ -138,8 +138,8 @@ function Stars({ value, size=12 }) {
 // ── SIZE GUIDE MODAL ──────────────────────────────────────────
 function SizeGuideModal({ onClose }) {
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:400, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
-      <div style={{ background:PAPER, borderRadius:'24px 24px 0 0', padding:24, width:'100%', maxWidth:480 }}>
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:400, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+      <div className="qs-sheet-in" style={{ background:PAPER, borderRadius:'24px 24px 0 0', padding:24, width:'100%', maxWidth:480 }}>
         <div style={{ width:36, height:4, background:LINE, borderRadius:2, margin:'0 auto 18px' }}/>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:18 }}>
           <div style={{ fontFamily:"'Playfair Display',serif", fontSize:19, color:INK, fontWeight:700 }}>Таблица размеров</div>
@@ -344,7 +344,7 @@ function AuthModal({ onClose, onLogin }) {
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:PAPER, borderRadius:22, padding:26, maxWidth:340, width:'100%' }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:18 }}>
           <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700 }}>{step==='phone'?'Вход в аккаунт':step==='pin'?'Введи PIN':step==='name'?'Создать аккаунт':'Придумай PIN'}</div>
@@ -408,7 +408,7 @@ function LeaveReview({ order, customer, onClose }) {
   };
 
   if (done) return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:PAPER, borderRadius:22, padding:26, maxWidth:340, width:'100%', textAlign:'center' }}>
         <div style={{ fontSize:46, marginBottom:12 }}>🎉</div>
         <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700, marginBottom:8 }}>Спасибо за отзыв!</div>
@@ -418,7 +418,7 @@ function LeaveReview({ order, customer, onClose }) {
   );
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:PAPER, borderRadius:22, padding:26, maxWidth:340, width:'100%' }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
           <div style={{ fontFamily:"'Playfair Display',serif", fontSize:17, color:INK, fontWeight:700 }}>Оставить отзыв</div>
@@ -439,7 +439,7 @@ function LeaveReview({ order, customer, onClose }) {
 }
 
 // ── ACCOUNT PAGE ──────────────────────────────────────────────
-function AccountPage({ customer, onClose, onLogout, addToast, pushOn, setPushOn }) {
+function AccountPage({ customer, onClose, onLogout, addToast, pushOn, setPushOn, onReorder }) {
   const city = useCity();
   const { t } = useLang();
   const [orders, setOrders]       = useState([]);
@@ -478,7 +478,7 @@ function AccountPage({ customer, onClose, onLogout, addToast, pushOn, setPushOn 
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:BG, zIndex:200, overflowY:'auto' }}>
+    <div className="qs-screen-in" style={{ position:'fixed', inset:0, background:BG, zIndex:200, overflowY:'auto' }}>
       {reviewFor && <LeaveReview order={reviewFor} customer={customer} onClose={()=>setReviewFor(null)}/>}
       <div style={{ ...S.page, padding:'16px 16px 80px' }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
@@ -537,6 +537,9 @@ function AccountPage({ customer, onClose, onLogout, addToast, pushOn, setPushOn 
               {o.status==='done' && (
                 <button style={{ ...S.btnGhost(GOLD), padding:'7px 12px', fontSize:12, marginTop:8 }} onClick={()=>setReviewFor(o)}>⭐ Оставить отзыв</button>
               )}
+              {(o.status==='done'||o.status==='cancelled') && (
+                <button style={{ ...S.btnGhost(BLUE), padding:'7px 12px', fontSize:12, marginTop:8, marginLeft:8 }} onClick={()=>onReorder(o)}>🔁 Повторить заказ</button>
+              )}
               {o.status==='new' && (
                 <button style={{ ...S.btnGhost(RED), padding:'7px 12px', fontSize:12, marginTop:8 }} onClick={()=>confirmCancel===o.id?cancelOrder(o):setConfirmCancel(o.id)}>
                   {confirmCancel===o.id?'⚠ Нажмите ещё раз для отмены':'✕ Отменить заказ'}
@@ -587,7 +590,7 @@ function CartPage({ cart, onClose, onCheckout, onRemove, onQtyChange, customer, 
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:BG, zIndex:200, overflowY:'auto' }}>
+    <div className="qs-screen-in" style={{ position:'fixed', inset:0, background:BG, zIndex:200, overflowY:'auto' }}>
       <div style={{ ...S.page, padding:'16px 16px 170px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:INK }}>←</button>
@@ -715,7 +718,7 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:BG, zIndex:300, overflowY:'auto' }}>
+    <div className="qs-screen-in" style={{ position:'fixed', inset:0, background:BG, zIndex:300, overflowY:'auto' }}>
       <div style={{ maxWidth:480, margin:'0 auto', padding:'16px 16px 120px' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:INK }}>←</button>
@@ -798,7 +801,7 @@ function OrderForm({ cart, customer, discount, onClose, onSuccess }) {
 function SuccessPage({ onClose, orderSummary }) {
   const { t } = useLang();
   return (
-    <div style={{ position:'fixed', inset:0, background:PAPER, zIndex:400, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24, overflowY:'auto' }}>
+    <div className="qs-screen-in" style={{ position:'fixed', inset:0, background:PAPER, zIndex:400, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:24, overflowY:'auto' }}>
       <div style={{ fontSize:64, marginBottom:18 }}>🎉</div>
       <div style={{ fontFamily:"'Playfair Display',serif", fontSize:25, color:INK, fontWeight:700, marginBottom:10, textAlign:'center' }}>{t('order_success')}</div>
       <div style={{ fontSize:14, color:MUTED, textAlign:'center', marginBottom:20, lineHeight:1.8 }}>
@@ -902,7 +905,7 @@ function ProductCard({ product, photo, onAddToCart, isFav, onToggleFav, isHit, o
 // ── CITY SELECTOR ─────────────────────────────────────────────
 function CitySelector({ city, setCity, onClose }) {
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:PAPER, borderRadius:22, padding:28, maxWidth:340, width:'100%', textAlign:'center' }}>
         <div style={{ fontSize:28, marginBottom:12 }}>📍</div>
         <div style={{ fontFamily:"'Playfair Display',serif", fontSize:20, fontWeight:700, color:INK, marginBottom:8 }}>Выбери регион</div>
@@ -1254,9 +1257,9 @@ function QuickView({ product, photo, onAddToCart, onClose, isFav, onToggleFav })
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.55)', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }}
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.55)', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }}
       onClick={onClose}>
-      <div style={{ background:PAPER, borderRadius:'22px 22px 0 0', padding:20, width:'100%', maxWidth:480, maxHeight:'85vh', overflowY:'auto' }}
+      <div className="qs-sheet-in" style={{ background:PAPER, borderRadius:'22px 22px 0 0', padding:20, width:'100%', maxWidth:480, maxHeight:'85vh', overflowY:'auto' }}
         onClick={e=>e.stopPropagation()}>
         <div style={{ width:36, height:4, background:LINE, borderRadius:2, margin:'0 auto 16px' }}/>
         <div style={{ display:'flex', gap:14, marginBottom:16 }}>
@@ -1317,7 +1320,7 @@ function NotifyModal({ product, onClose }) {
   };
 
   if(sent) return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:PAPER, borderRadius:20, padding:24, maxWidth:320, width:'100%', textAlign:'center' }}>
         <div style={{ fontSize:44, marginBottom:12 }}>🔔</div>
         <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, color:INK, fontWeight:700, marginBottom:8 }}>Готово!</div>
@@ -1328,7 +1331,7 @@ function NotifyModal({ product, onClose }) {
   );
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:PAPER, borderRadius:20, padding:24, maxWidth:320, width:'100%' }}>
         <div style={{ fontFamily:"'Playfair Display',serif", fontSize:17, color:INK, fontWeight:700, marginBottom:8 }}>🔔 Уведомить о наличии</div>
         <div style={{ fontSize:13, color:MUTED, marginBottom:16 }}>{product.name}</div>
@@ -1440,7 +1443,7 @@ function ProductPage({ product, photos, onAddToCart, isFav, onToggleFav, onClose
   },[product.id]);
 
   return (
-    <div style={{ position:'fixed', inset:0, background:BG, zIndex:200, overflowY:'auto' }}>
+    <div className="qs-screen-in" style={{ position:'fixed', inset:0, background:BG, zIndex:200, overflowY:'auto' }}>
       {showGuide && <SizeGuideModal onClose={()=>setShowGuide(false)}/>}
       <div style={{ maxWidth:480, margin:'0 auto', paddingBottom:120 }}>
         {/* Header */}
@@ -1675,8 +1678,8 @@ function ConsultantChat({ onClose }) {
   };
 
   if(!started) return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:400, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
-      <div style={{ background:PAPER, borderRadius:'22px 22px 0 0', padding:24, width:'100%', maxWidth:480 }}>
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:400, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+      <div className="qs-sheet-in" style={{ background:PAPER, borderRadius:'22px 22px 0 0', padding:24, width:'100%', maxWidth:480 }}>
         <div style={{ width:36, height:4, background:LINE, borderRadius:2, margin:'0 auto 16px' }}/>
         <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:700, color:INK, marginBottom:6 }}>💬 Онлайн-консультант</div>
         <div style={{ fontSize:13, color:MUTED, marginBottom:16 }}>Как вас зовут? (необязательно)</div>
@@ -1934,8 +1937,8 @@ function PaymentModal({ total, orderId, onClose, onPaid }) {
   };
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:500, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
-      <div style={{ background:PAPER, borderRadius:'22px 22px 0 0', padding:24, width:'100%', maxWidth:480 }}>
+    <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.5)', zIndex:500, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+      <div className="qs-sheet-in" style={{ background:PAPER, borderRadius:'22px 22px 0 0', padding:24, width:'100%', maxWidth:480 }}>
         <div style={{ width:36, height:4, background:LINE, borderRadius:2, margin:'0 auto 18px' }}/>
         <div style={{ fontFamily:"'Playfair Display',serif", fontSize:18, fontWeight:700, color:INK, marginBottom:6 }}>💳 Оплата онлайн</div>
         <div style={{ fontSize:14, color:MUTED, marginBottom:18 }}>Сумма к оплате: <strong style={{color:GOLD_D}}>{fmt(total)} сом</strong></div>
@@ -1983,6 +1986,7 @@ export default function ShopApp() {
   const [favs, setFavs]         = useState([]);
   const [customer, setCustomer] = useState(null);
   const [pushOn, setPushOn]     = useState(typeof Notification!=='undefined' && Notification.permission==='granted');
+  const [installPrompt, setInstallPrompt] = useState(null);
   const [screen, setScreen]     = useState('catalog');
   const [showAuth, setShowAuth] = useState(false);
   const [showOrder, setShowOrder] = useState(false);
@@ -2022,6 +2026,49 @@ export default function ShopApp() {
     Analytics.pageView();
   },[]);
 
+  // PWA install prompt (Chrome/Android/desktop — Safari/iOS has no equivalent event)
+  useEffect(()=>{
+    const onBeforeInstall = (e) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    return ()=>window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+  },[]);
+  const installApp = async () => {
+    if(!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  };
+
+  // Make the phone/browser "back" button close whatever screen or modal is
+  // open instead of leaving the site — push one history entry whenever a
+  // screen/modal opens, and close the top one when the user navigates back.
+  const anyOverlayOpen = !!(openProduct || screen==='cart' || screen==='account' || screen2==='chat' || showAuth || quickView || notifyProduct || showConsultant || showFaq || showPrivacy || showCitySelector);
+  const overlayPushedRef = useRef(false);
+  useEffect(()=>{
+    if(anyOverlayOpen && !overlayPushedRef.current){
+      window.history.pushState({ qsOverlay:true }, '');
+      overlayPushedRef.current = true;
+    } else if(!anyOverlayOpen){
+      overlayPushedRef.current = false;
+    }
+  },[anyOverlayOpen]);
+  useEffect(()=>{
+    const onPopState = () => {
+      if(showPrivacy) return setShowPrivacy(false);
+      if(showFaq) return setShowFaq(false);
+      if(showCitySelector) return setShowCitySelector(false);
+      if(notifyProduct) return setNotifyProduct(null);
+      if(quickView) return setQuickView(null);
+      if(showConsultant) return setShowConsultant(false);
+      if(showAuth) return setShowAuth(false);
+      if(screen2==='chat') return setScreen2('');
+      if(openProduct) return setOpenProduct(null);
+      if(screen==='cart'||screen==='account') return setScreen('catalog');
+    };
+    window.addEventListener('popstate', onPopState);
+    return ()=>window.removeEventListener('popstate', onPopState);
+  });
+
   // Show a toast for push notifications received while the app is open
   useEffect(()=>{
     if(!messaging) return;
@@ -2049,10 +2096,14 @@ export default function ShopApp() {
       const f = localStorage.getItem('qs_favs');
       const ci = localStorage.getItem('qs_city');
       const l = localStorage.getItem('qs_lang');
+      const cat = localStorage.getItem('qs_category');
+      const sort = localStorage.getItem('qs_sort');
       if(c) setCustomer(JSON.parse(c));
       if(f) setFavs(JSON.parse(f));
       if(ci) setCity(ci); else setShowCitySelector(true);
       if(l && DICT[l]) setLang(l);
+      if(cat && CATEGORIES.some(x=>x.id===cat)) setCategory(cat);
+      if(sort) setSortBy(sort);
       // Check referral code in URL
       const params = new URLSearchParams(window.location.search);
       const ref = params.get('ref');
@@ -2093,6 +2144,9 @@ export default function ShopApp() {
       }catch{}
     }
   };
+  useEffect(()=>{ try{ localStorage.setItem('qs_category', category); }catch{} },[category]);
+  useEffect(()=>{ try{ localStorage.setItem('qs_sort', sortBy); }catch{} },[sortBy]);
+
   const saveCity = (c) => { setCity(c); try{ localStorage.setItem('qs_city',c); }catch{}; };
   const saveLang = (l) => { setLang(l); try{ localStorage.setItem('qs_lang',l); }catch{}; };
   // Track recently viewed
@@ -2144,6 +2198,11 @@ export default function ShopApp() {
     next[i] = { ...next[i], qty, total: next[i].price*qty };
     return next;
   });
+  const reorder = (order) => {
+    const photo = firstPhoto(photos[order.productId]) || '';
+    addToCart({ id:order.productId, name:order.productName, price:order.price, size:order.size, qty:order.qty, total:order.price*order.qty, photo });
+    setScreen('cart');
+  };
   const checkout = (d) => {
     setDiscount(d);
     setScreen('catalog');
@@ -2178,10 +2237,29 @@ export default function ShopApp() {
   if(sortBy==='popular')    filtered = [...filtered].sort((a,b)=>(b.sold||0)-(a.sold||0));
 
   if(loading) return(
-    <div style={{ background:BG, minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:14 }}>
-      <style>{`${FONTS}*{box-sizing:border-box;margin:0;padding:0;}`}</style>
-      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:26, color:INK, fontWeight:700 }}>Queen <span style={{color:GOLD}}>Star</span></div>
-      <div style={{ fontSize:12, color:MUTED }}>Загрузка каталога...</div>
+    <div style={{ background:BG, minHeight:'100vh' }}>
+      <style>{`${FONTS}*{box-sizing:border-box;margin:0;padding:0;}
+        @keyframes qsShimmer{0%{background-position:-300px 0;}100%{background-position:300px 0;}}
+        .qs-skel{background:linear-gradient(90deg,${LINE} 25%,${SAND} 37%,${LINE} 63%);background-size:600px 100%;animation:qsShimmer 1.4s ease-in-out infinite;}`}</style>
+      <div style={{ padding:'14px 16px', display:'flex', alignItems:'center', gap:9, borderBottom:`1px solid ${LINE}` }}>
+        <div className="qs-skel" style={{ width:34, height:34, borderRadius:'50%', flexShrink:0 }}/>
+        <div className="qs-skel" style={{ width:120, height:16, borderRadius:6 }}/>
+      </div>
+      <div style={{ padding:'14px' }}>
+        <div className="qs-skel" style={{ height:110, borderRadius:20, marginBottom:16 }}/>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+          {Array.from({length:6}).map((_,i)=>(
+            <div key={i} style={{ borderRadius:18, overflow:'hidden', border:`1px solid ${LINE}` }}>
+              <div className="qs-skel" style={{ height:188 }}/>
+              <div style={{ padding:13 }}>
+                <div className="qs-skel" style={{ height:9, width:'35%', borderRadius:4, marginBottom:9 }}/>
+                <div className="qs-skel" style={{ height:13, width:'85%', borderRadius:4, marginBottom:9 }}/>
+                <div className="qs-skel" style={{ height:17, width:'55%', borderRadius:4 }}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 
@@ -2191,7 +2269,13 @@ export default function ShopApp() {
     <CityContext.Provider value={city}>
     <LangContext.Provider value={lang}>
     <div style={{ background:BG, minHeight:'100vh', color:INK, fontFamily:"'Manrope',sans-serif" }}>
-      <style>{`${FONTS}*{box-sizing:border-box;margin:0;padding:0;}input::placeholder,textarea::placeholder{color:#B8A98E;}button:disabled{opacity:0.6;}`}</style>
+      <style>{`${FONTS}*{box-sizing:border-box;margin:0;padding:0;}input::placeholder,textarea::placeholder{color:#B8A98E;}button:disabled{opacity:0.6;}
+        @keyframes qsScreenIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+        @keyframes qsSheetIn{from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);}}
+        @keyframes qsFadeIn{from{opacity:0;}to{opacity:1;}}
+        .qs-screen-in{animation:qsScreenIn 0.22s ease-out;}
+        .qs-sheet-in{animation:qsSheetIn 0.24s cubic-bezier(0.22,1,0.36,1);}
+        .qs-fade-in{animation:qsFadeIn 0.18s ease-out;}`}</style>
       <Toast toasts={toasts}/>
       <Header cartCount={cart.length} favCount={favs.length}
         onCart={()=>setScreen('cart')}
@@ -2214,7 +2298,7 @@ export default function ShopApp() {
       {showCitySelector && <CitySelector city={city} setCity={saveCity} onClose={()=>setShowCitySelector(false)}/>}
       {showAuth && <AuthModal onClose={()=>setShowAuth(false)} onLogin={login}/>}
       {screen2==='chat' && (
-        <div style={{ position:'fixed', inset:0, background:BG, zIndex:200 }}>
+        <div className="qs-screen-in" style={{ position:'fixed', inset:0, background:BG, zIndex:200 }}>
           <div style={{ background:PAPER, borderBottom:`1px solid ${LINE}`, padding:'13px 16px', display:'flex', alignItems:'center', gap:12 }}>
             <button onClick={()=>setScreen2('')} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:INK }}>←</button>
             <div style={{ fontFamily:"'Playfair Display',serif", fontSize:17, color:INK, fontWeight:700 }}>💬 Чат покупателей</div>
@@ -2225,8 +2309,8 @@ export default function ShopApp() {
       {showSuccess && <SuccessPage onClose={()=>setShowSuccess(false)} orderSummary={lastOrderSummary}/>}
       {showOrder && customer && <OrderForm cart={cart} customer={customer} discount={discount} onClose={()=>setShowOrder(false)} onSuccess={onOrderSuccess}/>}
       {showFaq && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }} onClick={()=>setShowFaq(false)}>
-          <div style={{ background:BG, borderRadius:'24px 24px 0 0', padding:20, width:'100%', maxWidth:480, maxHeight:'80vh', overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
+        <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }} onClick={()=>setShowFaq(false)}>
+          <div className="qs-sheet-in" style={{ background:BG, borderRadius:'24px 24px 0 0', padding:20, width:'100%', maxWidth:480, maxHeight:'80vh', overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
             <div style={{ width:36, height:4, background:LINE, borderRadius:2, margin:'0 auto 14px' }}/>
             <FaqSection/>
             <button style={{ ...S.btn(GOLD), marginTop:16 }} onClick={()=>setShowFaq(false)}>Закрыть</button>
@@ -2234,8 +2318,8 @@ export default function ShopApp() {
         </div>
       )}
       {showPrivacy && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }} onClick={()=>setShowPrivacy(false)}>
-          <div style={{ background:BG, borderRadius:'24px 24px 0 0', padding:20, width:'100%', maxWidth:480, maxHeight:'80vh', overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
+        <div className="qs-fade-in" style={{ position:'fixed', inset:0, background:'rgba(35,26,20,0.4)', zIndex:300, display:'flex', alignItems:'flex-end', justifyContent:'center' }} onClick={()=>setShowPrivacy(false)}>
+          <div className="qs-sheet-in" style={{ background:BG, borderRadius:'24px 24px 0 0', padding:20, width:'100%', maxWidth:480, maxHeight:'80vh', overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
             <div style={{ width:36, height:4, background:LINE, borderRadius:2, margin:'0 auto 14px' }}/>
             <PrivacyPolicy/>
             <button style={{ ...S.btn(GOLD), marginTop:16 }} onClick={()=>setShowPrivacy(false)}>Закрыть</button>
@@ -2243,7 +2327,7 @@ export default function ShopApp() {
         </div>
       )}
       {screen==='cart' && <CartPage cart={cart} onClose={()=>setScreen('catalog')} onCheckout={checkout} onRemove={removeFromCart} onQtyChange={updateCartQty} customer={customer} onNeedAuth={()=>{setScreen('catalog');setShowAuth(true);}}/>}
-      {screen==='account' && customer && <AccountPage customer={customer} onClose={()=>setScreen('catalog')} onLogout={logout} addToast={addToast} pushOn={pushOn} setPushOn={setPushOn}/>}
+      {screen==='account' && customer && <AccountPage customer={customer} onClose={()=>setScreen('catalog')} onLogout={logout} addToast={addToast} pushOn={pushOn} setPushOn={setPushOn} onReorder={reorder}/>}
 
       {darkMode && <style>{'body,#root{background:#0F0D0C!important;}input,select,textarea{background:#1A1614!important;color:#F0EBE3!important;border-color:#2E2520!important;}'}</style>}
       {screen==='catalog' && (
@@ -2278,7 +2362,11 @@ export default function ShopApp() {
               style={{ ...S.btnGhost('#555'), fontSize:12, padding:'7px 12px' }}>
               🌐 {LANG_LABEL[lang]}
             </button>
-
+            {installPrompt && (
+              <button onClick={installApp} style={{ ...S.btnGhost(GOLD), fontSize:12, padding:'7px 12px' }}>
+                📲 Установить
+              </button>
+            )}
           </div>
           {customer && !pushOn && (
             <div style={{ ...S.card, padding:'12px 14px', marginBottom:14, display:'flex', alignItems:'center', gap:10 }}>
